@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,12 +30,39 @@ const (
 	INFO
 	DEBUG
 )
-const LogTable = `CREATE TABLE IF NOT EXISTS log (
-    date DATETIME NOT NULL PRIMARY KEY,
-    log_type_id INT NOT NULL,
-    desc TEXT  NOT NULL,
-    service VARCHAR(16) NOT NULL
+
+const LogTable = `
+CREATE TABLE IF NOT EXISTS log (
+    timestamp INTEGER NOT NULL PRIMARY KEY,
+    type_id TINYINT NOT NULL,
+    service VARCHAR(8) NOT NULL COLLATE NOCASE,
+    desc TEXT NOT NULL COLLATE NOCASE
 );
+create index log_idx on log (timestamp, type_id, service COLLATE NOCASE);
+
+CREATE VIEW last_hour_logs AS
+  SELECT * FROM log
+  WHERE timestamp >= strftime('%s', 'now', '-1 hour')
+  ORDER BY timestamp DESC;
+CREATE VIEW last_day_logs AS
+  SELECT * FROM log
+  WHERE timestamp >= strftime('%s', 'now', '-1 day')
+  ORDER BY timestamp DESC;
+CREATE VIEW last_week_logs AS
+  SELECT * FROM log
+  WHERE timestamp >= strftime('%s', 'now', '-7 day')
+  ORDER BY timestamp DESC;
+CREATE VIEW last_month_logs AS
+  SELECT * FROM log
+  WHERE timestamp >= strftime('%s', 'now', '-1 month')
+  ORDER BY timestamp DESC;
+CREATE VIEW last_year_logs AS
+  SELECT * FROM log
+  WHERE timestamp >= strftime('%s', 'now', '-1 year')
+  ORDER BY timestamp DESC;
+
+INSERT INTO log (timestamp, type_id, desc, service)
+  VALUES (strftime('%s'), 0, 'Creation of LNBank', 'LNBank');
 `
 
 func (lt LogType) String() string {
@@ -50,7 +78,7 @@ func (lt LogType) String() string {
 	case ERROR:
 		return "ERROR"
 	default:
-		return "NORMAL"
+		return fmt.Sprintf("%d", int(lt))
 	}
 }
 
@@ -68,8 +96,10 @@ type Service interface {
 }
 
 // All services running are here
-var Services map[string]Service
-var Logdb *sql.DB
+var (
+	Services map[string]Service
+	Logdb    *sql.DB
+)
 
 var (
 	ServiceRootDir string
@@ -77,6 +107,7 @@ var (
 )
 
 func init() {
+	var err error
 	home, err := os.UserHomeDir()
 	if err != nil {
 		panic("Panic, can't find UserHomeDir")
@@ -86,25 +117,69 @@ func init() {
 
 	err = os.MkdirAll(ServiceRootDir, 0755)
 	if err != nil {
-		panic("Cannot create root dir")
+		panic("Cannot create LNBank root dir")
 	}
 
 	LogDBFile = filepath.Join(ServiceRootDir, "log.sqlite3")
-
-	Logdb, err := sql.Open("sqlite3", LogDBFile)
-	if err != nil {
-		fmt.Println("Error opening/creating SQLite DB:", err)
-		panic("Panic, can't create log SQLite DB")
-	}
-	defer Logdb.Close()
-
-	_, err = Logdb.Exec(LogTable)
-	if err != nil {
-		fmt.Println("Error creating table:", err)
-		panic("Panic, can't create table")
+	// Check if the log database file exists
+	_, err = os.Stat(LogDBFile)
+	if err != nil { // if file does not exist
+		Logdb, err = sql.Open("sqlite3", LogDBFile)
+		if err != nil {
+			fmt.Println("Error opening/creating SQLite DB:", err)
+			panic("Panic, can't create log SQLite DB")
+		} else {
+			_, err = Logdb.Exec(LogTable)
+			if err != nil {
+				fmt.Println("Error creating table:", err)
+				panic("Panic, can't create table")
+			}
+		}
+	} else { // if it does exist, just open the db
+		Logdb, err = sql.Open("sqlite3", LogDBFile)
+		if err != nil {
+			panic("Log DB is corrupted")
+		}
 	}
 
 	// PREPARE SERVICES
 	Services = make(map[string]Service)
+}
 
+// Check that the log is valid and modify it to make it valid. If not, returns
+// a list of errors found.
+func (log *Log) Validate() (err []error) {
+	err = make([]error, 0)
+	if log == nil {
+		return append(err, errors.New("trying to log a null log entry"))
+	}
+	unixtimestamp := log.date.Unix()
+	if unixtimestamp == 0 {
+		err = append(err, errors.New("incorrect time '0'"))
+		log.date = time.Now()
+	} else if log.date.After(time.Now()) {
+		err = append(err, errors.New("has a time in the future"))
+		log.date = time.Now()
+	}
+	if log.logType > DEBUG {
+		err = append(err, fmt.Errorf("incorrect log type %v", log.logType))
+		log.logType = NORMAL
+	}
+	if log.desc == "" {
+		err = append(err, errors.New("no description"))
+		log.desc = "undefined"
+	}
+	if log.service == "" {
+		err = append(err, errors.New("no service provided"))
+		log.service = "LNBANK"
+	}
+	if len(err) == 0 {
+		return nil
+	}
+	return err
+}
+
+func LogToDb(log *Log) (err []error) {
+	err = log.Validate()
+	return err
 }

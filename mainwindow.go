@@ -14,7 +14,11 @@ func main_window(w fyne.Window) {
 		// General layout
 		layout.NewGridLayout(2),
 		// Left layout
-		widget.NewLabel("Left"),
+		container.New(
+			layout.NewGridLayoutWithRows(2),
+			widget.NewLabel("Services:"),
+			widget.NewLabel("Left2"),
+		),
 		// Right layout
 		widget.NewLabel("Right"),
 	)
