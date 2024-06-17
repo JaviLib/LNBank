@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func CompareErrorSlices(expected []error, actual []error) bool {
@@ -115,4 +117,50 @@ func TestValidate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLogToDb(t *testing.T) {
+	db := Logdb
+
+	log := &Log{
+		date:    time.Now(),
+		logType: INFO,
+		desc:    "Test log message",
+		service: "test_service",
+	}
+	errs, fatal := LogToDb(log)
+	assert.False(t, fatal, "%v", errs)
+	assert.Empty(t, errs)
+	var id int
+	err := db.QueryRow(
+		"SELECT timestamp FROM log WHERE desc=? AND service=?",
+		log.desc, log.service,
+	).Scan(&id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.NotZero(t, id)
+
+	// test with some errors but not fatal
+	now := time.Now()
+	log = &Log{
+		date:    now,
+		logType: 99, //incorrect
+		desc:    "Test log message with incorrect logtype",
+		service: "test_service",
+	}
+	errs, fatal = LogToDb(log)
+	assert.False(t, fatal, "%v", errs)
+	assert.NotEmpty(t, errs)
+
+	// check that logtype was corrected
+	var type_id LogType
+	err = db.QueryRow(
+		"SELECT type_id FROM log WHERE desc=? AND service=? AND timestamp=?",
+		log.desc, log.service, now.Unix(),
+	).Scan(&type_id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Zero(t, type_id)
 }

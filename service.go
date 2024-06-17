@@ -33,7 +33,7 @@ const (
 
 const LogTable = `
 CREATE TABLE IF NOT EXISTS log (
-    timestamp INTEGER NOT NULL PRIMARY KEY,
+    timestamp INTEGER NOT NULL ,
     type_id TINYINT NOT NULL,
     service VARCHAR(8) NOT NULL COLLATE NOCASE,
     desc TEXT NOT NULL COLLATE NOCASE
@@ -179,7 +179,24 @@ func (log *Log) Validate() (err []error) {
 	return err
 }
 
-func LogToDb(log *Log) (err []error) {
-	err = log.Validate()
-	return err
+// Log to the database, it returns a list of errors found and if any of them is fatal
+func LogToDb(log *Log) (errs []error, fatal bool) {
+	// Validate the log entry and return any errors found
+	errs = log.Validate()
+	// Prepare a statement for inserting the log into the database
+	stmt, err := Logdb.Prepare(
+		"INSERT INTO log (timestamp, type_id, desc, service) VALUES (?, ?, ?, ?)",
+	)
+	if err != nil {
+		return append(errs, err), true
+	}
+	defer stmt.Close()
+
+	// Execute the prepared statement with the log data
+	_, err = stmt.Exec(log.date.Unix(), log.logType, log.desc, log.service)
+	if err != nil {
+		return append(errs, err), true
+	}
+
+	return errs, false
 }
