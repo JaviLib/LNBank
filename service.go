@@ -15,8 +15,8 @@ import (
 type Log struct {
 	date    time.Time
 	desc    string
-	logType LogType
 	service string
+	logType LogType
 }
 
 // log types
@@ -179,23 +179,39 @@ func (log *Log) Validate() (err []error) {
 	return err
 }
 
+var insertStmt *sql.Stmt
+
 // Log to the database, it returns a list of errors found and if any of them is fatal
 func LogToDb(log *Log) (errs []error, fatal bool) {
 	// Validate the log entry and return any errors found
 	errs = log.Validate()
-	// Prepare a statement for inserting the log into the database
-	stmt, err := Logdb.Prepare(
-		"INSERT INTO log (timestamp, type_id, desc, service) VALUES (?, ?, ?, ?)",
-	)
+
+	// Prepare a statement for inserting the log into the database but only if it doesn't exist
+	if insertStmt == nil {
+		var err error
+		insertStmt, err = Logdb.Prepare(
+			"INSERT INTO log (timestamp, type_id, desc, service) VALUES (?, ?, ?, ?)",
+		)
+		if err != nil {
+			insertStmt = nil
+			return append(errs, err), true
+		}
+		// TODO defer stmt.Close()
+	}
+
+	_, err := insertStmt.Exec(log.date.Unix(), log.logType, log.desc, log.service)
 	if err != nil {
 		return append(errs, err), true
 	}
-	defer stmt.Close()
 
-	// Execute the prepared statement with the log data
-	_, err = stmt.Exec(log.date.Unix(), log.logType, log.desc, log.service)
-	if err != nil {
-		return append(errs, err), true
+	// Errors in logs are also logged to the db
+	if errs != nil {
+		LogToDb(&Log{
+			date:    time.Now(),
+			service: "LNBank",
+			desc:    fmt.Sprintf("Service %v provided an incorrect log: %v", log.service, errs),
+			logType: WARNING,
+		})
 	}
 
 	return errs, false

@@ -145,7 +145,7 @@ func TestLogToDb(t *testing.T) {
 	now := time.Now()
 	log = &Log{
 		date:    now,
-		logType: 99, //incorrect
+		logType: 99, // incorrect
 		desc:    "Test log message with incorrect logtype",
 		service: "test_service",
 	}
@@ -163,4 +163,15 @@ func TestLogToDb(t *testing.T) {
 		t.Fatal(err)
 	}
 	assert.Zero(t, type_id)
+
+	// Logs with errors are also logged to the db
+	var desc string
+	err = db.QueryRow(
+		"SELECT desc FROM log WHERE timestamp=? AND desc LIKE '%incorrect log type%' ORDER BY timestamp DESC",
+		time.Now().Unix(),
+	).Scan(&desc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, desc, "Service test_service provided an incorrect log: [incorrect log type 99]")
 }

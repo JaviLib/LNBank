@@ -15,8 +15,10 @@ MaxClientCircuitsPending 1024
 	`
 )
 
-var TorConfigPath string
-var TorConfigFile string
+var (
+	TorConfigPath string
+	TorConfigFile string
+)
 
 type TorService struct {
 	onReady func()
@@ -25,7 +27,12 @@ type TorService struct {
 }
 
 func (l TorService) fmtLog(lt LogType, desc string) *Log {
-	log := &Log{time.Now(), desc, lt, "Tor"}
+	log := &Log{
+		date:    time.Now(),
+		desc:    desc,
+		logType: lt,
+		service: "Tor",
+	}
 	return log
 }
 
