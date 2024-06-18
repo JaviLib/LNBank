@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -215,4 +216,128 @@ func LogToDb(log *Log) (errs []error, fatal bool) {
 	}
 
 	return errs, false
+}
+
+type LogQuery struct {
+	next  func() (Log, error)
+	close func()
+	getn  func(n uint) ([]Log, error)
+}
+
+// Query the logs and returns a closure useful to iterate over the rows.
+// desc is no case and limit is the maximum number of rows allowed.
+func QueryLog(duration time.Duration,
+	logtypes []LogType,
+	services []string,
+	desc string,
+	limit uint,
+) (LogQuery, error) {
+	var conditions strings.Builder
+	conditions.WriteString("SELECT timestamp, type_id, service, desc FROM log WHERE timestamp >= ?")
+
+	if logtypes != nil {
+		conditions.WriteString(" AND (")
+		first := true
+		for range logtypes {
+			if !first {
+				conditions.WriteString(" OR")
+			} else {
+				first = false
+			}
+			conditions.WriteString(" type_id=?")
+		}
+		conditions.WriteString(" )")
+	}
+
+	if services != nil {
+		conditions.WriteString(" AND (")
+		first := true
+		for range services {
+			if !first {
+				conditions.WriteString(" OR")
+			} else {
+				first = false
+			}
+			conditions.WriteString(" service=?")
+		}
+		conditions.WriteString(" )")
+	}
+	if desc != "" {
+		conditions.WriteString(" AND desc LIKE ?")
+	}
+
+	conditions.WriteString(" ORDER BY timestamp DESC")
+
+	if limit != 0 {
+		conditions.WriteString(" LIMIT ?")
+	}
+
+	fmt.Println(conditions.String())
+
+	var params []interface{}
+
+	// timestamp
+	params = append(params, time.Now().Add(-duration).Unix())
+
+	// logtypes
+	for _, logtype := range logtypes {
+		params = append(params, logtype)
+	}
+
+	// services
+	for _, service := range services {
+		params = append(params, service) // services
+	}
+
+	// desc and limit
+	if desc != "" {
+		params = append(params, "%"+desc+"%")
+	}
+	if limit != 0 {
+		params = append(params, limit)
+	}
+
+	result, err := Logdb.Query(conditions.String(), params...)
+	if err != nil {
+		return LogQuery{}, err
+	}
+	logQuery := LogQuery{
+		next: func() (Log, error) {
+			var log Log
+			if !result.Next() {
+				result.Close()
+				return log, errors.New("end")
+			}
+			var unixdate int64
+			err := result.Scan(&unixdate, &log.logType, &log.service, &log.desc)
+			if err != nil {
+				return Log{}, err
+			}
+
+			log.date = time.Unix(unixdate, 0)
+			return log, nil
+		},
+		close: func() { result.Close() },
+		getn: func(n uint) ([]Log, error) {
+			var logs []Log
+			for result.Next() {
+				var unixdate int64
+				var log Log
+				err := result.Scan(&unixdate, &log.logType, &log.service, &log.desc)
+				if err != nil {
+					_, _ = LogToDb(&Log{
+						date:    time.Now(),
+						service: "LNBank",
+						logType: WARNING,
+						desc:    "unable to scan from the db: " + err.Error(),
+					})
+					return []Log{}, errors.New("unable to scan from the db: " + err.Error())
+				}
+				log.date = time.Unix(unixdate, 0)
+				logs = append(logs, log)
+			}
+			return logs, nil
+		},
+	}
+	return logQuery, nil
 }

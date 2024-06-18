@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -174,4 +176,71 @@ func TestLogToDb(t *testing.T) {
 		t.Fatal(err)
 	}
 	assert.Equal(t, desc, "Service test_service provided an incorrect log: [incorrect log type 99]")
+}
+
+func TestQueryLog(t *testing.T) {
+	servs := []string{"service1", "service2", "service3"}
+	for i := range 1000 {
+		errs, fatal := LogToDb(&Log{
+			// insert logs in the past
+			date:    time.Now().Add(-time.Hour * time.Duration(i)),
+			logType: LogType(rand.Intn(DEBUG)),
+			service: servs[rand.Intn(2)],
+			desc:    fmt.Sprintf("random description %v", rand.Intn(5)),
+		})
+		assert.Nil(t, errs)
+		assert.False(t, fatal)
+	}
+
+	// check that we can get the first log
+
+	query, err := QueryLog(time.Hour*5, nil, nil, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		first_row, err := query.next()
+		assert.NoError(t, err)
+		fmt.Println(first_row)
+		query.close()
+	}
+	// check for logtypes
+	query, err = QueryLog(time.Hour*5, []LogType{WARNING}, nil, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		first_row, err := query.next()
+		assert.NoError(t, err)
+		fmt.Println(first_row)
+		query.close()
+	}
+	// check for services
+	query, err = QueryLog(time.Hour*5, []LogType{ERROR}, []string{servs[0], servs[1]}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		first_row, err := query.next()
+		assert.NoError(t, err)
+		fmt.Println(first_row)
+		query.close()
+	}
+	// check for description
+	query, err = QueryLog(time.Hour*5, nil, nil, "description 4", 0)
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		first_row, err := query.next()
+		assert.NoError(t, err)
+		fmt.Println(first_row)
+		query.close()
+	}
+	// check getting 1000
+	query, err = QueryLog(time.Hour*1000, nil, nil, "", 1000)
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		logs, err := query.getn(1000)
+		assert.NoError(t, err)
+		assert.Len(t, logs, 1000)
+		query.close()
+	}
 }
