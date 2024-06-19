@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -16,6 +17,10 @@ func TestTorStart(t *testing.T) {
 	}
 	onLog := func(log *Log) {
 		assert.NotNil(t, log)
+		assert.Equal(t, LogType(INFO), log.logType)
+		if testing.Verbose() {
+			fmt.Println(log)
+		}
 	}
 	ts.start(onReady, onFatal, onLog)
 	// wait for goroutines to finish

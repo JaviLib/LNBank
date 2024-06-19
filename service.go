@@ -34,7 +34,7 @@ const (
 
 const LogTable = `
 PRAGMA journal_mode = WAL;
-PRAGMA busy_timeout = 5000;
+PRAGMA busy_timeout = 10;
 
 CREATE TABLE IF NOT EXISTS log (
     timestamp INTEGER NOT NULL ,
@@ -274,8 +274,6 @@ func QueryLog(duration time.Duration,
 	if limit != 0 {
 		conditions.WriteString(" LIMIT ?")
 	}
-
-	fmt.Println(conditions.String())
 
 	var params []interface{}
 

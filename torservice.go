@@ -11,19 +11,23 @@ import (
 
 //go:embed tor-static/tor/dist/bin/tor
 var torExe []byte
+var TorExePath string
 
 func InstallTorExe() error {
-	path := ServiceRootDir + "/bin/tor"
-	info, err := os.Stat(path)
+	TorExePath = ServiceRootDir + "/bin/tor"
+	info, err := os.Stat(TorExePath)
 	if err != nil || info.Size() != int64(len(torExe)) {
 		err := os.MkdirAll(ServiceRootDir+"/bin", 0755)
 		if err != nil {
 			return errors.New("Cannot create bin/tor directory: " + err.Error())
 		}
-		err = os.WriteFile(ServiceRootDir+"/bin/tor", torExe, 0755)
+		err = os.WriteFile(TorExePath, torExe, 0755)
 		if err != nil {
 			return errors.New("Cannot install Tor executable: " + err.Error())
 		}
+		// gc the memory
+		torExe = nil
+		return errors.New("installed")
 	}
 	// gc the memory
 	torExe = nil
@@ -62,17 +66,19 @@ func (l TorService) fmtLog(lt LogType, desc string) *Log {
 // Implement the Service interface
 func (ts TorService) start(onReady func(), onFatal func(*Log), onLog func(*Log)) {
 	if onReady == nil || onFatal == nil || onLog == nil {
-		panic("Some function parameter to tor start method is missing. Bad implementation.")
+		panic("Some function parameter to tor start method is missing.")
 	}
 	ts.onReady = onReady
 	ts.onFatal = onFatal
 	ts.onLog = onLog
 
-	if err := InstallTorExe(); err != nil {
+	if err := InstallTorExe(); err != nil && err.Error() != "installed" {
 		log := ts.fmtLog(FATAL, err.Error())
 		go onLog(log)
 		go onFatal(log)
 		return
+	} else if err != nil && err.Error() == "installed" {
+		go onLog(ts.fmtLog(INFO, "tor executable installed under "+TorExePath))
 	}
 
 	TorConfigPath = filepath.Join(ServiceRootDir, "tor")
