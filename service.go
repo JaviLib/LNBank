@@ -33,6 +33,9 @@ const (
 )
 
 const LogTable = `
+PRAGMA journal_mode = WAL;
+PRAGMA busy_timeout = 5000;
+
 CREATE TABLE IF NOT EXISTS log (
     timestamp INTEGER NOT NULL ,
     type_id TINYINT NOT NULL,

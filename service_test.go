@@ -186,7 +186,7 @@ func TestQueryLog(t *testing.T) {
 			date:    time.Now().Add(-time.Hour * time.Duration(i)),
 			logType: LogType(rand.Intn(DEBUG)),
 			service: servs[rand.Intn(2)],
-			desc:    fmt.Sprintf("random description %v", rand.Intn(5)),
+			desc:    fmt.Sprintf("random description %% %v", rand.Intn(5)),
 		})
 		assert.Nil(t, errs)
 		assert.False(t, fatal)
@@ -224,7 +224,7 @@ func TestQueryLog(t *testing.T) {
 		query.close()
 	}
 	// check for description
-	query, err = QueryLog(time.Hour*5, nil, nil, "description 4", 0)
+	query, err = QueryLog(time.Hour*5, nil, nil, "description % 4", 0)
 	if err != nil {
 		t.Fatal(err)
 	} else {

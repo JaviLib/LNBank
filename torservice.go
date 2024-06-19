@@ -1,11 +1,34 @@
 package main
 
 import (
+	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 )
+
+//go:embed tor-static/tor/dist/bin/tor
+var torExe []byte
+
+func InstallTorExe() error {
+	path := ServiceRootDir + "/bin/tor"
+	info, err := os.Stat(path)
+	if err != nil || info.Size() != int64(len(torExe)) {
+		err := os.MkdirAll(ServiceRootDir+"/bin", 0755)
+		if err != nil {
+			return errors.New("Cannot create bin/tor directory: " + err.Error())
+		}
+		err = os.WriteFile(ServiceRootDir+"/bin/tor", torExe, 0755)
+		if err != nil {
+			return errors.New("Cannot install Tor executable: " + err.Error())
+		}
+	}
+	// gc the memory
+	torExe = nil
+	return nil
+}
 
 const (
 	defaultTorConfig = `
@@ -44,6 +67,13 @@ func (ts TorService) start(onReady func(), onFatal func(*Log), onLog func(*Log))
 	ts.onReady = onReady
 	ts.onFatal = onFatal
 	ts.onLog = onLog
+
+	if err := InstallTorExe(); err != nil {
+		log := ts.fmtLog(FATAL, err.Error())
+		go onLog(log)
+		go onFatal(log)
+		return
+	}
 
 	TorConfigPath = filepath.Join(ServiceRootDir, "tor")
 	err := os.MkdirAll(TorConfigPath, 0755) // make sure the log directory exists

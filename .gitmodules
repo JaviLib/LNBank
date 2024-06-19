@@ -1,0 +1,3 @@
+[submodule "tor-static"]
+	path = tor-static
+	url = https://github.com/JaviLib/tor-static.git
