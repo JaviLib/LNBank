@@ -1,3 +1,6 @@
 [submodule "tor-static"]
 	path = tor-static
 	url = https://github.com/JaviLib/tor-static.git
+[submodule "lnd"]
+	path = lnd
+	url = https://github.com/lightningnetwork/lnd

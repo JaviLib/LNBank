@@ -180,7 +180,7 @@ func TestLogToDb(t *testing.T) {
 
 func TestQueryLog(t *testing.T) {
 	servs := []string{"service1", "service2", "service3"}
-	for i := range 1000 {
+	for i := range 10000 {
 		errs, fatal := LogToDb(&Log{
 			// insert logs in the past
 			date:    time.Now().Add(-time.Hour * time.Duration(i)),

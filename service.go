@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -32,43 +33,6 @@ const (
 	DEBUG
 )
 
-const LogTable = `
-PRAGMA journal_mode = WAL;
-PRAGMA busy_timeout = 10;
-
-CREATE TABLE IF NOT EXISTS log (
-    timestamp INTEGER NOT NULL ,
-    type_id TINYINT NOT NULL,
-    service VARCHAR(8) NOT NULL COLLATE NOCASE,
-    desc TEXT NOT NULL COLLATE NOCASE
-);
-create index log_idx on log (timestamp, type_id, service COLLATE NOCASE);
-
-CREATE VIEW last_hour_logs AS
-  SELECT * FROM log
-  WHERE timestamp >= strftime('%s', 'now', '-1 hour')
-  ORDER BY timestamp DESC;
-CREATE VIEW last_day_logs AS
-  SELECT * FROM log
-  WHERE timestamp >= strftime('%s', 'now', '-1 day')
-  ORDER BY timestamp DESC;
-CREATE VIEW last_week_logs AS
-  SELECT * FROM log
-  WHERE timestamp >= strftime('%s', 'now', '-7 day')
-  ORDER BY timestamp DESC;
-CREATE VIEW last_month_logs AS
-  SELECT * FROM log
-  WHERE timestamp >= strftime('%s', 'now', '-1 month')
-  ORDER BY timestamp DESC;
-CREATE VIEW last_year_logs AS
-  SELECT * FROM log
-  WHERE timestamp >= strftime('%s', 'now', '-1 year')
-  ORDER BY timestamp DESC;
-
-INSERT INTO log (timestamp, type_id, desc, service)
-  VALUES (strftime('%s'), 0, 'Creation of LNBank', 'LNBank');
-`
-
 func (lt LogType) String() string {
 	switch lt {
 	case FATAL:
@@ -88,11 +52,11 @@ func (lt LogType) String() string {
 
 type Service interface {
 	start(
+		ctx context.Context,
 		onReady func(),
-		onFatal func(*Log),
+		onStop func(*Log),
 		onLog func(*Log),
 	)
-	stop(onStopped func())
 	getConfigFile() (string, error)
 
 	// This is used to format the log before showing to the user or insert in db
@@ -110,8 +74,16 @@ var (
 	LogDBFile      string
 )
 
+var (
+	ServicesContext    context.Context
+	ServicesCancelFunc context.CancelFunc
+)
+
 func init() {
 	var err error
+
+	ServicesContext, ServicesCancelFunc = context.WithCancel(context.Background())
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		panic("Panic, can't find UserHomeDir")
@@ -342,3 +314,40 @@ func QueryLog(duration time.Duration,
 	}
 	return logQuery, nil
 }
+
+const LogTable = `
+PRAGMA journal_mode = WAL;
+PRAGMA busy_timeout = 10;
+
+CREATE TABLE IF NOT EXISTS log (
+    timestamp INTEGER NOT NULL ,
+    type_id TINYINT NOT NULL,
+    service VARCHAR(8) NOT NULL COLLATE NOCASE,
+    desc TEXT NOT NULL COLLATE NOCASE
+);
+create index log_idx on log (timestamp, type_id, service COLLATE NOCASE);
+
+CREATE VIEW last_hour_logs AS
+  SELECT * FROM log
+  WHERE timestamp >= strftime('%s', 'now', '-1 hour')
+  ORDER BY timestamp DESC;
+CREATE VIEW last_day_logs AS
+  SELECT * FROM log
+  WHERE timestamp >= strftime('%s', 'now', '-1 day')
+  ORDER BY timestamp DESC;
+CREATE VIEW last_week_logs AS
+  SELECT * FROM log
+  WHERE timestamp >= strftime('%s', 'now', '-7 day')
+  ORDER BY timestamp DESC;
+CREATE VIEW last_month_logs AS
+  SELECT * FROM log
+  WHERE timestamp >= strftime('%s', 'now', '-1 month')
+  ORDER BY timestamp DESC;
+CREATE VIEW last_year_logs AS
+  SELECT * FROM log
+  WHERE timestamp >= strftime('%s', 'now', '-1 year')
+  ORDER BY timestamp DESC;
+
+INSERT INTO log (timestamp, type_id, desc, service)
+  VALUES (strftime('%s'), 0, 'Creation of LNBank', 'LNBank');
+`

@@ -10,4 +10,5 @@ func main() {
 
 	main_window(w)
 	w.ShowAndRun()
+	ServicesCancelFunc()
 }
