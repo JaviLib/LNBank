@@ -116,7 +116,7 @@ func (ts TorService) start(ctx context.Context, onReady func(), onStop func(*Log
 		go onLog(ts.fmtLog(FATAL, "error executing Tor: "+err.Error()))
 	}
 
-	log := ts.fmtLog(NORMAL, "normal Tor exit")
+	log := ts.fmtLog(INFO, "normal Tor exit")
 exit:
 	for {
 		scanComming := make(chan bool)
@@ -133,7 +133,7 @@ exit:
 			text := scanner.Text()
 			l, err := parseLogEntry(text)
 			if err != nil {
-				go onLog(ts.fmtLog(WARNING, fmt.Sprintf("non-conventional Tor log format %v : %s", err, text)))
+				go onLog(ts.fmtLog(WARNING, fmt.Sprintf("non-conventional Tor log format %v: %s", err, text)))
 			} else {
 				go onLog(&l)
 				if strings.Contains(l.desc, "Bootstrapped 100%") {
@@ -143,17 +143,17 @@ exit:
 		}
 	}
 	if scanerr := scanner.Err(); scanerr != nil {
-		log = ts.fmtLog(ERROR, "error receiving stdout from Tor")
+		log = ts.fmtLog(FATAL, "error receiving stdout from Tor: %v"+scanerr.Error())
 		go onLog(log)
 	}
 	if err := ts.cmd.Process.Kill(); err != nil {
 		log = ts.fmtLog(FATAL, "cannot kill Tor process: "+err.Error())
 		go onLog(log)
 	}
-	if err := ts.cmd.Wait(); err != nil {
-		log = ts.fmtLog(FATAL, err.Error())
-		go onLog(log)
-	}
+	// if err := ts.cmd.Wait(); err != nil {
+	// 	log = ts.fmtLog(FATAL, err.Error())
+	// 	go onLog(log)
+	// }
 	go onStop(log)
 }
 

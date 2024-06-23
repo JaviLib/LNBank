@@ -200,7 +200,9 @@ func TestQueryLog(t *testing.T) {
 	} else {
 		first_row, err := query.next()
 		assert.NoError(t, err)
-		fmt.Println(first_row)
+		if testing.Verbose() {
+			fmt.Println(first_row)
+		}
 		query.close()
 	}
 	// check for logtypes
@@ -210,7 +212,9 @@ func TestQueryLog(t *testing.T) {
 	} else {
 		first_row, err := query.next()
 		assert.NoError(t, err)
-		fmt.Println(first_row)
+		if testing.Verbose() {
+			fmt.Println(first_row)
+		}
 		query.close()
 	}
 	// check for services
@@ -220,7 +224,9 @@ func TestQueryLog(t *testing.T) {
 	} else {
 		first_row, err := query.next()
 		assert.NoError(t, err)
-		fmt.Println(first_row)
+		if testing.Verbose() {
+			fmt.Println(first_row)
+		}
 		query.close()
 	}
 	// check for description
@@ -230,7 +236,9 @@ func TestQueryLog(t *testing.T) {
 	} else {
 		first_row, err := query.next()
 		assert.NoError(t, err)
-		fmt.Println(first_row)
+		if testing.Verbose() {
+			fmt.Println(first_row)
+		}
 		query.close()
 	}
 	// check getting 1000
