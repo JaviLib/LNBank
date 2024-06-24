@@ -48,6 +48,7 @@ type TorService struct {
 	onStop  func(*Log)
 	onLog   func(*Log)
 	cmd     *exec.Cmd
+	ctx     context.Context
 }
 
 func (l TorService) fmtLog(lt LogType, desc string) *Log {
@@ -68,6 +69,7 @@ func (ts TorService) start(ctx context.Context, onReady func(), onStop func(*Log
 	ts.onReady = onReady
 	ts.onStop = onStop
 	ts.onLog = onLog
+	ts.ctx = ctx
 
 	if err := InstallTorExe(); err != nil && err.Error() != "installed" {
 		log := ts.fmtLog(FATAL, err.Error())
@@ -116,8 +118,7 @@ func (ts TorService) start(ctx context.Context, onReady func(), onStop func(*Log
 		go onLog(ts.fmtLog(FATAL, "error executing Tor: "+err.Error()))
 	}
 
-	log := ts.fmtLog(INFO, "normal Tor exit")
-exit:
+scanLoop:
 	for {
 		scanComming := make(chan bool)
 		go func() {
@@ -125,13 +126,13 @@ exit:
 		}()
 		select {
 		case <-ctx.Done():
-			break exit
+			break scanLoop
 		case goon := <-scanComming:
 			if !goon {
-				break exit
+				break scanLoop
 			}
 			text := scanner.Text()
-			l, err := parseLogEntry(text)
+			l, err := parseTorEntry(text)
 			if err != nil {
 				go onLog(ts.fmtLog(WARNING, fmt.Sprintf("non-conventional Tor log format %v: %s", err, text)))
 			} else {
@@ -142,6 +143,7 @@ exit:
 			}
 		}
 	}
+	log := ts.fmtLog(INFO, "normal Tor exit")
 	if scanerr := scanner.Err(); scanerr != nil {
 		log = ts.fmtLog(FATAL, "error receiving stdout from Tor: %v"+scanerr.Error())
 		go onLog(log)
@@ -154,23 +156,24 @@ exit:
 	// 	log = ts.fmtLog(FATAL, err.Error())
 	// 	go onLog(log)
 	// }
-	go onStop(log)
+	onStop(log)
 }
 
 func (ts TorService) getConfigFile() (string, error) {
 	return TorConfigFile, nil // assuming that the torrc file path is stored as a global variable TorConfigPath
 }
 
-func parseLogEntry(line string) (Log, error) {
+func parseTorEntry(line string) (Log, error) {
 	parts := strings.SplitN(line, " ", 5)
 	if len(parts) < 4 {
 		return Log{}, fmt.Errorf("invalid log format")
 	}
 
-	timeLayout := "2006 Jan _2 15:04:05.000"
-	correctDate := fmt.Sprintf("%s %s",
+	timeLayout := "2006 Jan _2 15:04:05.000 MST"
+	correctDate := fmt.Sprintf("%s %s %s",
 		time.Now().Format("2006"),
-		strings.Join(parts[0:3], " "))
+		strings.Join(parts[0:3], " "),
+		time.Now().Format("MST"))
 	t, err := time.Parse(timeLayout, correctDate)
 	if err != nil {
 		return Log{}, fmt.Errorf("failed to parse timestamp: %v", err)
@@ -195,7 +198,9 @@ func parseLogEntry(line string) (Log, error) {
 		service: "Tor",
 	}
 
-	return logEntry, nil
+	errs := logEntry.Validate()
+
+	return logEntry, errors.Join(errs...)
 }
 
 const (
@@ -204,6 +209,18 @@ SocksPort localhost:9055
 ControlPort localhost:9056
 MaxClientCircuitsPending 1024	
 CookieAuthentication 1
+
+## End of LNBank configuration. Below is a copy of the official
+## Tor example configuration file. Please do not enable conflicting
+## configurations with the above ones. If you change anything ensure you
+## update it too in other services like LND. Do not make changes if you
+## don't know what you are doing.
+## If you want to reset this configuration to the default provided by 
+## LNBank, just exit LNBank and remove the directory ~/LNBank/tor/ and
+## everything will be reinstalled in the next start. Note: do not remove 
+## LND or any other direrctory, as you may loose all your channels.
+
+## ------------------------------------------------------------------
 
 ## Configuration file for a typical Tor user
 ## Last updated 28 February 2019 for Tor 0.3.5.1-alpha.

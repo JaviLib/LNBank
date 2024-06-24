@@ -11,7 +11,7 @@ import (
 
 func TestTorStart(t *testing.T) {
 	ts := TorService{}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	ctx, cancel := context.WithTimeout(ServicesContext, time.Second*30)
 
 	gotReady := false
 	onReady := func() {

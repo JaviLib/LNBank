@@ -50,6 +50,10 @@ func (lt LogType) String() string {
 	}
 }
 
+func (l Log) String() string {
+	return fmt.Sprintf("%v %v %v: %v", l.service, l.logType, l.date.Format(time.Stamp), l.desc)
+}
+
 type Service interface {
 	start(
 		ctx context.Context,
