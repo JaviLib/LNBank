@@ -12,12 +12,14 @@ import (
 )
 
 func main_window(w fyne.Window) {
-	Services["Tor"] = TorService{}
+	// When Tor is ready, pass the context to the next service (LND)
+	torIsReady := make(chan context.Context)
 
 	left := []fyne.CanvasObject{
-		widget.NewLabel("Services:"),
-		tor_widgets(),
+		widget.NewLabelWithStyle("SERVICES", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		tor_widgets(torIsReady),
 	}
+
 	content := container.New(
 		// General layout
 		layout.NewGridLayout(2),
@@ -33,11 +35,10 @@ func main_window(w fyne.Window) {
 	w.SetContent(content)
 }
 
-func tor_widgets() fyne.CanvasObject {
+func tor_widgets(torIsReady chan<- context.Context) fyne.CanvasObject {
 	torversion := binding.NewString()
-	torlabel := widget.NewLabel("Tor")
-	torversion.Set("Tor")
-	torlabel.Bind(torversion)
+	_ = torversion.Set("Tor")
+	torlabel := widget.NewLabelWithData(torversion)
 
 	service := TorService{}
 
@@ -46,13 +47,15 @@ func tor_widgets() fyne.CanvasObject {
 	onLog := func(l *Log) {
 		fmt.Println(l)
 	}
+	onReady := func() {
+		_ = torversion.Set("Tor READY")
+		// pass the context to the main window so the rest of the services can run
+		torIsReady <- ctx
+	}
 	onStop := func(l *Log) {
 		fmt.Println(l)
+		// this will make stop all child services
 		cancel()
-	}
-	onReady := func() {
-		torversion.Set("Tor READY")
-		fmt.Println("Ready")
 	}
 
 	go service.start(ctx, onReady, onStop, onLog)
