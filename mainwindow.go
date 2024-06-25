@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 )
@@ -17,7 +17,7 @@ func main_window(w fyne.Window) {
 	lndIsReady := make(chan context.Context)
 
 	left := []fyne.CanvasObject{
-		widget.NewLabelWithStyle("SERVICES", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		// widget.NewLabelWithStyle("SERVICES", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		tor_widgets(torIsReady),
 		lnd_widgets(torIsReady, lndIsReady),
 	}
@@ -27,7 +27,7 @@ func main_window(w fyne.Window) {
 		layout.NewGridLayout(2),
 		// Left layout
 		container.New(
-			layout.NewGridLayoutWithRows(3),
+			layout.NewGridLayoutWithRows(2),
 			left...,
 		),
 		// Right layout
@@ -38,10 +38,7 @@ func main_window(w fyne.Window) {
 }
 
 func tor_widgets(torIsReady chan<- context.Context) fyne.CanvasObject {
-	torversion := binding.NewString()
-	_ = torversion.Set("Tor STOPPED")
-	torlabel := widget.NewLabelWithData(torversion)
-
+	card := widget.NewCard("🔴 Tor", "", nil)
 	service := TorService{}
 
 	ctx, cancel := context.WithCancel(ServicesContext)
@@ -49,35 +46,46 @@ func tor_widgets(torIsReady chan<- context.Context) fyne.CanvasObject {
 	onLog := func(l *Log) {
 		fmt.Println(l)
 	}
+	isRunning := false
 	onReady := func() {
-		_ = torversion.Set("Tor READY")
+		card.SetTitle("✅ Tor")
+		card.SetContent(nil)
+		go func() {
+			isRunning = true
+			clock := time.Now()
+			for isRunning {
+				card.SetSubTitle("v0.4.8.12    🕓 " + time.Since(clock).Round(time.Second).String())
+				<-time.After(time.Second)
+			}
+		}()
 		// pass the context to the main window so the rest of the services can run
 		torIsReady <- ctx
 	}
 	onStop := func(l *Log) {
 		fmt.Println(l)
-		_ = torversion.Set("Tor STOPPED")
+		card.SetTitle("🔴 Tor")
+		isRunning = false
 		// this will make stop all child services
 		cancel()
 	}
 
-	_ = torversion.Set("Tor STARTING")
+	card.SetTitle("⏳ Tor")
+	card.SetSubTitle("starting...")
+	card.SetContent(widget.NewProgressBarInfinite())
 	go service.start(ctx, onReady, onStop, onLog)
 
-	return torlabel
+	return card
 }
 
 func lnd_widgets(torIsReady <-chan context.Context, lndIsReady chan<- context.Context) fyne.CanvasObject {
-	lndversion := binding.NewString()
-	_ = lndversion.Set("LND STOPPED")
-	lndlabel := widget.NewLabelWithData(lndversion)
+	card := widget.NewCard("🔴 lnd", "", nil)
 	go func() {
 		torctx := <-torIsReady
 		ctx, cancel := context.WithCancel(torctx)
-		_ = lndversion.Set("LND STARTING")
+		card.SetTitle("⏳ lnd")
 		lndIsReady <- ctx
 		// TODO implement LND GUI
 		cancel()
 	}()
-	return lndlabel
+	return card
 }
