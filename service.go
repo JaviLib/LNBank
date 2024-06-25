@@ -36,15 +36,15 @@ const (
 func (lt LogType) String() string {
 	switch lt {
 	case FATAL:
-		return "FATAL"
+		return "❌ ❌ ❌ FATAL ERROR"
 	case WARNING:
-		return "WARNING"
+		return "❌ WARNING"
 	case INFO:
-		return "INFO"
+		return "✔"
 	case DEBUG:
-		return "DEBUG"
+		return "🐛"
 	case ERROR:
-		return "ERROR"
+		return "❌ ❌ ERROR"
 	default:
 		return fmt.Sprintf("%d", int(lt))
 	}

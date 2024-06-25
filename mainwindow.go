@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -15,30 +17,58 @@ import (
 func main_window(w fyne.Window) {
 	// When Tor is ready, pass the context to the next service (LND)
 	torIsReady := make(chan context.Context)
-	lndIsReady := make(chan context.Context)
+	// lndIsReady := make(chan context.Context)
+	logs := make(chan *Log)
 
-	left := []fyne.CanvasObject{
-		// widget.NewLabelWithStyle("SERVICES", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-		tor_widgets(torIsReady),
-		lnd_widgets(torIsReady, lndIsReady),
-	}
-
-	content := container.New(
-		// General layout
-		layout.NewGridLayout(2),
-		// Left layout
-		container.New(
-			layout.NewGridLayoutWithRows(2),
-			left...,
-		),
-		// Right layout
-		widget.NewLabel("Right"),
+	left := container.New(
+		layout.NewVBoxLayout(),
+		tor_widgets(torIsReady, logs),
+		// lnd_widgets(torIsReady, lndIsReady),
 	)
+
+	logwidget := widget.NewRichTextWithText("Session entries:\n")
+	logwidget.Wrapping = fyne.TextWrapWord
+
+	logscroll := container.NewScroll(logwidget)
+	logscroll.SetMinSize(fyne.Size{Width: 640, Height: 480})
+
+	content := container.NewBorder(nil, nil, left, nil, logscroll)
+
+	go func() {
+		for {
+			select {
+			case l := <-logs:
+				bold := false
+				if l.logType == ERROR || l.logType == FATAL || l.logType == WARNING {
+					bold = true
+				}
+				segment := widget.TextSegment{
+					Text: l.String(),
+					Style: widget.RichTextStyle{
+						TextStyle: fyne.TextStyle{
+							Bold: bold,
+						},
+					},
+				}
+				logwidget.Segments = append(logwidget.Segments, &segment)
+				logscroll.ScrollToBottom()
+				logwidget.Refresh()
+				errs, fatal := LogToDb(l)
+				if errs != nil && fatal {
+					dialog.ShowError(errors.Join(errs...), w)
+				}
+			// case <-lndIsReady:
+			// logwidget.Segments = append(logwidget.Segments, &widget.TextSegment{Text: "lnd is ready"})
+			case <-ServicesContext.Done():
+				return
+			}
+		}
+	}()
 
 	w.SetContent(content)
 }
 
-func tor_widgets(torIsReady chan<- context.Context) fyne.CanvasObject {
+func tor_widgets(torIsReady chan<- context.Context, logs chan<- *Log) fyne.CanvasObject {
 	card := widget.NewCard("🔴 Tor", "", nil)
 	service := TorService{}
 
@@ -53,6 +83,7 @@ func tor_widgets(torIsReady chan<- context.Context) fyne.CanvasObject {
 
 	onLog := func(l *Log) {
 		fmt.Println(l)
+		logs <- l
 	}
 	onReady := func() {
 		card.SetTitle("✅ Tor")
