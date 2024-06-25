@@ -30,11 +30,11 @@ func InstallTorExe() error {
 			return errors.New("Cannot install Tor executable: " + err.Error())
 		}
 		// gc the memory
-		torExe = nil
+		// torExe = nil
 		return errors.New("installed")
 	}
 	// gc the memory
-	torExe = nil
+	// torExe = nil
 	return nil
 }
 
