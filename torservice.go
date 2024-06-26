@@ -118,15 +118,22 @@ func (ts TorService) start(ctx context.Context, onReady func(), onStop func(*Log
 		go onLog(ts.fmtLog(FATAL, "error executing Tor: "+err.Error()))
 	}
 
+	scanComming := make(chan bool, 1000)
+	scan := func() {
+		scanComming <- scanner.Scan()
+	}
+	log := ts.fmtLog(INFO, "exit")
 scanLoop:
 	for {
-		scanComming := make(chan bool)
-		go func() {
-			scanComming <- scanner.Scan()
-		}()
+		go scan()
 		select {
 		case <-ctx.Done():
-			break scanLoop
+			// send the kill signal and lets hope the scanner will end with some useful logs
+			if err := ts.cmd.Process.Kill(); err != nil {
+				log = ts.fmtLog(FATAL, "cannot kill Tor process: "+err.Error())
+			}
+			// force scanning for last msgs
+			go scan()
 		case goon := <-scanComming:
 			if !goon {
 				break scanLoop
@@ -143,19 +150,15 @@ scanLoop:
 			}
 		}
 	}
-	log := ts.fmtLog(INFO, "normal Tor exit")
 	if scanerr := scanner.Err(); scanerr != nil {
 		log = ts.fmtLog(FATAL, "error receiving stdout from Tor: %v"+scanerr.Error())
-		go onLog(log)
 	}
-	if err := ts.cmd.Process.Kill(); err != nil {
-		log = ts.fmtLog(FATAL, "cannot kill Tor process: "+err.Error())
-		go onLog(log)
+	if err := ts.cmd.Wait(); err != nil {
+		if err.Error() != "signal: killed" {
+			log = ts.fmtLog(FATAL, err.Error())
+		}
 	}
-	// if err := ts.cmd.Wait(); err != nil {
-	// 	log = ts.fmtLog(FATAL, err.Error())
-	// 	go onLog(log)
-	// }
+	go onLog(log)
 	onStop(log)
 }
 

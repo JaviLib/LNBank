@@ -36,7 +36,7 @@ const (
 func (lt LogType) String() string {
 	switch lt {
 	case FATAL:
-		return "❌ ❌ ❌ FATAL ERROR"
+		return "❌ ❌ ❌ FATAL"
 	case WARNING:
 		return "❌ WARNING"
 	case INFO:

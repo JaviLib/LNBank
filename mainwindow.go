@@ -32,8 +32,40 @@ func main_window(w fyne.Window) {
 	logscroll := container.NewScroll(logwidget)
 	logscroll.SetMinSize(fyne.Size{Width: 640, Height: 480})
 
-	content := container.NewBorder(nil, nil, left, nil, logscroll)
+	filterchecks := widget.NewCheckGroup(
+		[]string{"Tor", "lnd", "Neutrino", "HTCL", "gossip", "wallet", "LNBits", "lndG", "clearnet"},
+		func([]string) {},
+	)
+	filterchecks.Horizontal = true
+	filterchecks.SetSelected([]string{"Tor", "lnd", "Neutrino", "HTCL", "gossip", "wallet", "LNBits", "lndG", "clearnet"})
+	filterentry := widget.NewEntry()
+	filterentry.PlaceHolder = "description filter      "
+	filterentry.Scroll = container.ScrollNone
+	filterentry.Wrapping = fyne.TextWrapOff
 
+	filtererrors := widget.NewCheckGroup(
+		[]string{LogType(FATAL).String(), LogType(ERROR).String(), LogType(WARNING).String(), LogType(INFO).String() + " INFO", LogType(DEBUG).String() + " DEBUG"},
+		func([]string) {},
+	)
+	filtererrors.Horizontal = true
+	filtererrors.SetSelected([]string{LogType(FATAL).String(), LogType(ERROR).String(), LogType(WARNING).String(), LogType(INFO).String() + " INFO", LogType(DEBUG).String() + " DEBUG"})
+
+	filterchoices := widget.NewRadioGroup([]string{"Session", "All", "Month", "Week", "Day", "Hour"}, func(string) {})
+	filterchoices.Horizontal = true
+	filterchoices.SetSelected("Session")
+	toggleonall := widget.NewButtonWithIcon("", theme.ConfirmIcon(), func() {})
+	toggleoffall := widget.NewButtonWithIcon("", theme.ContentClearIcon(), func() {})
+	copylogs := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {})
+	filtercheckboxes := container.NewVBox(
+		container.NewHBox(toggleoffall, toggleonall, copylogs, filterchecks, filterentry),
+		container.NewHBox(filterchoices, filtererrors),
+	)
+
+	right := container.NewBorder(nil, filtercheckboxes, nil, nil, logscroll)
+
+	content := container.NewBorder(nil, nil, left, nil, right)
+
+	sessionlogs := make([]*Log, 0)
 	go func() {
 		for {
 			select {
@@ -51,8 +83,9 @@ func main_window(w fyne.Window) {
 					},
 				}
 				logwidget.Segments = append(logwidget.Segments, &segment)
-				logscroll.ScrollToBottom()
 				logwidget.Refresh()
+				logscroll.ScrollToBottom()
+				sessionlogs = append(sessionlogs, l)
 				errs, fatal := LogToDb(l)
 				if errs != nil && fatal {
 					dialog.ShowError(errors.Join(errs...), w)
