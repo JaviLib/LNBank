@@ -17,8 +17,10 @@ import (
 func main_window(w fyne.Window) {
 	// When Tor is ready, pass the context to the next service (LND)
 	torIsReady := make(chan context.Context)
+	defer close(torIsReady)
 	// lndIsReady := make(chan context.Context)
 	logs := make(chan *Log)
+	defer close(logs)
 
 	left := container.New(
 		layout.NewVBoxLayout(),
@@ -99,6 +101,7 @@ func main_window(w fyne.Window) {
 	}()
 
 	w.SetContent(content)
+	w.ShowAndRun()
 }
 
 func tor_widgets(torIsReady chan<- context.Context, logs chan<- *Log) fyne.CanvasObject {

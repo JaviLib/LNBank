@@ -119,23 +119,26 @@ func (ts TorService) start(ctx context.Context, onReady func(), onStop func(*Log
 	}
 
 	scanComming := make(chan bool, 1000)
-	scan := func() {
-		scanComming <- scanner.Scan()
-	}
+	go func() {
+		for scanner.Scan() {
+			scanComming <- true
+		}
+		scanComming <- false
+		// close(scanComming)
+	}()
 	log := ts.fmtLog(INFO, "exit")
 scanLoop:
 	for {
-		go scan()
 		select {
 		case <-ctx.Done():
 			// send the kill signal and lets hope the scanner will end with some useful logs
 			if err := ts.cmd.Process.Kill(); err != nil {
 				log = ts.fmtLog(FATAL, "cannot kill Tor process: "+err.Error())
+				go onLog(log)
 			}
-			// force scanning for last msgs
-			go scan()
 		case goon := <-scanComming:
 			if !goon {
+				defer close(scanComming)
 				break scanLoop
 			}
 			text := scanner.Text()

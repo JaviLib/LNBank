@@ -9,6 +9,5 @@ func main() {
 	w := a.NewWindow("LNBank")
 
 	main_window(w)
-	w.ShowAndRun()
 	ServicesCancelFunc()
 }
