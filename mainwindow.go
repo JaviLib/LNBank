@@ -102,6 +102,13 @@ func main_window(w fyne.Window) {
 	}()
 
 	w.SetContent(content)
+	w.SetCloseIntercept(func() {
+		// TODO in fact, hide it and minimize to systray
+		fmt.Println("Canceling services")
+		ServicesCancelFunc()
+		w.Close()
+		fmt.Println("Done cancelling services")
+	})
 	w.ShowAndRun()
 }
 

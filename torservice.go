@@ -22,11 +22,6 @@ func InstallTorExe() error {
 	TorExePath = filepath.Join(ServiceRootDir, "embed", "mac", "tor", "tor")
 	_, err := os.Stat(TorExePath)
 	if err != nil {
-		err := os.MkdirAll(filepath.Join(ServiceRootDir), 0755)
-		if err != nil {
-			return errors.New("Cannot create tor directory: " + err.Error())
-		}
-
 		rd := bytes.NewReader(embededTor)
 		if err := UnzipReader(rd, int64(len(embededTor)), ServiceRootDir); err != nil {
 			return errors.New("Cannot unzip embeded tor.zip: " + err.Error())
