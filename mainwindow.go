@@ -18,14 +18,15 @@ func main_window(w fyne.Window) {
 	// When Tor is ready, pass the context to the next service (LND)
 	torIsReady := make(chan context.Context)
 	defer close(torIsReady)
-	// lndIsReady := make(chan context.Context)
-	logs := make(chan *Log)
+	lndIsReady := make(chan context.Context)
+	defer close(lndIsReady)
+	logs := make(chan *Log, 1000)
 	defer close(logs)
 
 	left := container.New(
 		layout.NewVBoxLayout(),
 		tor_widgets(torIsReady, logs),
-		// lnd_widgets(torIsReady, lndIsReady),
+		lnd_widgets(torIsReady, lndIsReady),
 	)
 
 	logwidget := widget.NewRichTextWithText("Session entries:\n")
