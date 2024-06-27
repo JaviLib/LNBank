@@ -1,10 +1,13 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,6 +85,39 @@ var (
 	ServicesContext    context.Context
 	ServicesCancelFunc context.CancelFunc
 )
+
+func UnzipReader(rd *bytes.Reader, size int64, dest string) error {
+	r, err := zip.NewReader(rd, size)
+	if err != nil {
+		return errors.New("Cannot open embedded file: " + err.Error())
+	}
+	for _, f := range r.File {
+		if f.FileInfo().IsDir() {
+			err := os.MkdirAll(filepath.Join(dest, f.Name), os.ModePerm)
+			if err != nil {
+				return errors.New("Cannot create directory: " + err.Error())
+			}
+			continue
+		}
+		final, err := os.Create(filepath.Join(dest, f.Name))
+		if err != nil {
+			return errors.New("Cannot create file: " + err.Error())
+		}
+		defer final.Close()
+		fcloser, err := f.Open()
+		if err != nil {
+			return errors.New("Cannot open embedded file: " + err.Error())
+		}
+		_, err = io.Copy(final, fcloser)
+		if err != nil {
+			return errors.New("Cannot copy embedded file to disk: " + err.Error())
+		}
+		if err := final.Chmod(f.Mode()); err != nil {
+			return errors.New("Cannot change permissions on embeded file: " + err.Error())
+		}
+	}
+	return nil
+}
 
 func init() {
 	var err error

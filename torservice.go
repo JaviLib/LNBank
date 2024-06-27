@@ -1,14 +1,12 @@
 package main
 
 import (
-	"archive/zip"
 	"bufio"
 	"bytes"
 	"context"
 	_ "embed"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,37 +28,13 @@ func InstallTorExe() error {
 		}
 
 		rd := bytes.NewReader(embededTor)
-		r, err := zip.NewReader(rd, int64(len(embededTor)))
-		if err != nil {
-			return errors.New("Cannot open embedded tor file: " + err.Error())
+		if err := UnzipReader(rd, int64(len(embededTor)), ServiceRootDir); err != nil {
+			return errors.New("Cannot unzip embeded tor.zip: " + err.Error())
 		}
-		for _, f := range r.File {
-			if f.FileInfo().IsDir() {
-				err := os.MkdirAll(filepath.Join(ServiceRootDir, f.Name), os.ModePerm)
-				if err != nil {
-					return errors.New("Cannot create directory: " + err.Error())
-				}
-				continue
-			}
-			final, err := os.Create(filepath.Join(ServiceRootDir, f.Name))
-			if err != nil {
-				return errors.New("Cannot create file: " + err.Error())
-			}
-			defer final.Close()
-			fcloser, err := f.Open()
-			if err != nil {
-				return errors.New("Cannot open embedded file: " + err.Error())
-			}
-			_, err = io.Copy(final, fcloser)
-			if err != nil {
-				return errors.New("Cannot copy embedded file to disk: " + err.Error())
-			}
-			final.Chmod(f.Mode())
-		}
+		// gc the memory
+		embededTor = nil
 		return errors.New("installed")
 	}
-	// gc the memory
-	// torExe = nil
 	return nil
 }
 
