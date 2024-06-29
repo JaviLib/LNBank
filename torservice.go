@@ -18,12 +18,12 @@ import (
 var embededTor []byte
 var TorExePath string
 
-func InstallTorExe() error {
+func InstallTorExe(onLog func(*Log)) error {
 	TorExePath = filepath.Join(ServiceRootDir, "embed", "mac", "tor", "tor")
 	_, err := os.Stat(TorExePath)
 	if err != nil {
 		rd := bytes.NewReader(embededTor)
-		if err := UnzipReader(rd, int64(len(embededTor)), ServiceRootDir); err != nil {
+		if err := UnzipReader(rd, int64(len(embededTor)), ServiceRootDir, onLog); err != nil {
 			return errors.New("Cannot unzip embeded tor.zip: " + err.Error())
 		}
 		// gc the memory
@@ -66,7 +66,7 @@ func (ts TorService) start(ctx context.Context, onReady func(), onStop func(*Log
 	ts.onLog = onLog
 	ts.ctx = ctx
 
-	if err := InstallTorExe(); err != nil && err.Error() != "installed" {
+	if err := InstallTorExe(onLog); err != nil && err.Error() != "installed" {
 		log := ts.fmtLog(FATAL, err.Error())
 		go onLog(log)
 		go onStop(log)
@@ -86,11 +86,6 @@ func (ts TorService) start(ctx context.Context, onReady func(), onStop func(*Log
 
 	// TODO check that torrc contains the proper path, in case that the user migrated to another computer
 	TorConfigFile = filepath.Join(TorConfigPath, "torrc")
-	// TODO include geoip
-	// Jun 22 14:22:49.000 [notice] Parsing GEOIP IPv4 file /Users/javi/dev/LNBank/tor-
-	// static/tor/dist/share/tor/geoip.
-	// Jun 22 14:22:49.000 [notice] Parsing GEOIP IPv6 file /Users/javi/dev/LNBank/tor-
-	// static/tor/dist/share/tor/geoip6.
 	if _, err := os.Stat(TorConfigFile); os.IsNotExist(err) {
 		config := fmt.Sprintf("DataDirectory %s/data\n%s", TorConfigPath, defaultTorConfig)
 		err = os.WriteFile(TorConfigFile, []byte(config), 0644)
@@ -102,6 +97,7 @@ func (ts TorService) start(ctx context.Context, onReady func(), onStop func(*Log
 			return
 		}
 	}
+
 	ts.cmd = exec.Command(TorExePath, "-f", TorConfigFile)
 	stdout, err := ts.cmd.StdoutPipe()
 	if err != nil {

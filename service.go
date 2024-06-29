@@ -86,39 +86,6 @@ var (
 	ServicesCancelFunc context.CancelFunc
 )
 
-func UnzipReader(rd *bytes.Reader, size int64, dest string) error {
-	r, err := zip.NewReader(rd, size)
-	if err != nil {
-		return errors.New("Cannot open embedded file: " + err.Error())
-	}
-	for _, f := range r.File {
-		if f.FileInfo().IsDir() {
-			err := os.MkdirAll(filepath.Join(dest, f.Name), os.ModePerm)
-			if err != nil {
-				return errors.New("Cannot create directory: " + err.Error())
-			}
-			continue
-		}
-		final, err := os.Create(filepath.Join(dest, f.Name))
-		if err != nil {
-			return errors.New("Cannot create file: " + err.Error())
-		}
-		defer final.Close()
-		fcloser, err := f.Open()
-		if err != nil {
-			return errors.New("Cannot open embedded file: " + err.Error())
-		}
-		_, err = io.Copy(final, fcloser)
-		if err != nil {
-			return errors.New("Cannot copy embedded file to disk: " + err.Error())
-		}
-		if err := final.Chmod(f.Mode()); err != nil {
-			return errors.New("Cannot change permissions on embeded file: " + err.Error())
-		}
-	}
-	return nil
-}
-
 func init() {
 	var err error
 
@@ -160,6 +127,83 @@ func init() {
 
 	// PREPARE SERVICES
 	Services = make(map[string]Service)
+}
+
+func UnzipReader(rd *bytes.Reader, size int64, dest string, onLog func(*Log)) error {
+	r, err := zip.NewReader(rd, size)
+	if err != nil {
+		return errors.New("Cannot open embedded file: " + err.Error())
+	}
+	for _, f := range r.File {
+		if f.FileInfo().IsDir() {
+			err := os.MkdirAll(filepath.Join(dest, f.Name), os.ModePerm)
+			if err != nil {
+				err := errors.New("Cannot create directory: " + err.Error())
+				go onLog(&Log{
+					date:    time.Now(),
+					service: "LNBank",
+					logType: FATAL,
+					desc:    err.Error(),
+				})
+				return err
+			}
+			continue
+		}
+		final, err := os.Create(filepath.Join(dest, f.Name))
+		if err != nil {
+			err := errors.New("Cannot create file: " + err.Error())
+			go onLog(&Log{
+				date:    time.Now(),
+				service: "LNBank",
+				logType: FATAL,
+				desc:    err.Error(),
+			})
+			return err
+		}
+		defer final.Close()
+		fcloser, err := f.Open()
+		if err != nil {
+			err := errors.New("Cannot open embedded file: " + err.Error())
+			go onLog(&Log{
+				date:    time.Now(),
+				service: "LNBank",
+				logType: FATAL,
+				desc:    err.Error(),
+			})
+			return err
+		}
+		_, err = io.Copy(final, fcloser)
+		if err != nil {
+			err := errors.New("Cannot copy embedded file to disk: " + err.Error())
+			go onLog(&Log{
+				date:    time.Now(),
+				service: "LNBank",
+				logType: FATAL,
+				desc:    err.Error(),
+			})
+			return err
+		}
+		if err := final.Chmod(f.Mode()); err != nil {
+			err := errors.New("Cannot change permissions on embeded file: " + err.Error())
+			go onLog(&Log{
+				date:    time.Now(),
+				service: "LNBank",
+				logType: FATAL,
+				desc:    err.Error(),
+			})
+			return err
+		}
+		final.Close()
+		fcloser.Close()
+
+		go onLog(&Log{
+			date:    time.Now(),
+			service: "LNBank",
+			logType: INFO,
+			desc:    final.Name() + " installed.",
+		})
+	}
+	return nil
 }
 
 // Check that the log is valid and modify it to make it valid. If not, returns

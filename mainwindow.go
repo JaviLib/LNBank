@@ -104,10 +104,15 @@ func main_window(w fyne.Window) {
 	w.SetContent(content)
 	w.SetCloseIntercept(func() {
 		// TODO in fact, hide it and minimize to systray
-		fmt.Println("Canceling services")
+		logs <- &Log{
+			date:    time.Now(),
+			logType: WARNING,
+			service: "LNBank",
+			desc:    "closing all services and exiting in 2 seconds",
+		}
 		ServicesCancelFunc()
+		time.Sleep(time.Second * 2)
 		w.Close()
-		fmt.Println("Done cancelling services")
 	})
 	w.ShowAndRun()
 }
