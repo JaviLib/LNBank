@@ -18,7 +18,9 @@ func main_window(w fyne.Window) {
 	// When Tor is ready, pass the context to the next service (LND)
 	torIsReady := make(chan context.Context)
 	defer close(torIsReady)
-	lndIsReady := make(chan context.Context)
+	// this channel should have a length equal to the number of services that
+	// depend on lnd, and lnd should call all of them checking its capacity:
+	lndIsReady := make(chan context.Context, 2)
 	defer close(lndIsReady)
 	logs := make(chan *Log, 1000)
 	defer close(logs)
@@ -75,7 +77,7 @@ func main_window(w fyne.Window) {
 			select {
 			case l := <-logs:
 				bold := false
-				if l.logType == ERROR || l.logType == FATAL || l.logType == WARNING {
+				if l.logType == ERROR || l.logType == FATAL {
 					bold = true
 				}
 				segment := widget.TextSegment{
@@ -94,8 +96,11 @@ func main_window(w fyne.Window) {
 				if errs != nil && fatal {
 					dialog.ShowError(errors.Join(errs...), w)
 				}
+				// TODO remove once the dependencies are installed
 			case <-lndIsReady:
 				logwidget.Segments = append(logwidget.Segments, &widget.TextSegment{Text: "lnd is ready"})
+				logwidget.Refresh()
+				logscroll.ScrollToBottom()
 			case <-done:
 				return
 			}
@@ -119,73 +124,18 @@ func main_window(w fyne.Window) {
 	w.ShowAndRun()
 }
 
-func tor_widgets(torIsReady chan<- context.Context, logs chan<- *Log) fyne.CanvasObject {
-	card := widget.NewCard("🔴 Tor", "", nil)
-	service := TorService{}
-
-	var runtor func()
-	var ctx context.Context
-	var cancel context.CancelFunc
-
-	settings := widget.NewButtonWithIcon("config", theme.SettingsIcon(), func() {
-		fmt.Println("Settings tor")
-	})
-	isRunning := false
-
-	onLog := func(l *Log) {
-		fmt.Println(l)
-		logs <- l
-	}
-	onReady := func() {
-		card.SetTitle("✅ Tor")
-		card.SetContent(container.New(layout.NewGridLayoutWithColumns(2),
-			widget.NewButtonWithIcon("stop", theme.MediaStopIcon(), cancel),
-			settings))
-		go func() {
-			isRunning = true
-			clock := time.Now()
-			for isRunning {
-				card.SetSubTitle("v0.4.8.12    🕓 " + time.Since(clock).Round(time.Second).String())
-				time.Sleep(time.Second)
-			}
-		}()
-		// pass the context to the main window so the rest of the services can run
-		torIsReady <- ctx
-	}
-	onStop := func(l *Log) {
-		fmt.Println(l)
-		card.SetTitle("🔴 Tor")
-		card.SetSubTitle("stopped")
-		card.SetContent(container.New(layout.NewGridLayoutWithColumns(2),
-			widget.NewButtonWithIcon("start", theme.MediaPlayIcon(), runtor), settings))
-		isRunning = false
-		// this will make stop all child services
-		cancel()
-	}
-
-	runtor = func() {
-		ctx, cancel = context.WithCancel(ServicesContext)
-		card.SetTitle("⏳ Tor")
-		card.SetSubTitle("starting...")
-		card.SetContent(container.New(layout.NewGridLayoutWithColumns(1),
-			widget.NewButtonWithIcon("cancel", theme.CancelIcon(), cancel),
-		))
-		// card.SetContent(widget.NewProgressBarInfinite())
-		go service.start(ctx, onReady, onStop, onLog)
-	}
-	runtor()
-
-	return card
-}
-
 func lnd_widgets(torIsReady <-chan context.Context, lndIsReady chan<- context.Context) fyne.CanvasObject {
 	card := widget.NewCard("🔴 lnd", "", nil)
 	go func() {
 		torctx := <-torIsReady
 		ctx, cancel := context.WithCancel(torctx)
 		card.SetTitle("⏳ lnd")
-		lndIsReady <- ctx
+		// call all dependencies once started:
+		for range cap(lndIsReady) {
+			lndIsReady <- ctx
+		}
 		// TODO implement LND GUI
+		fmt.Println("lnd finished")
 		cancel()
 	}()
 	return card
