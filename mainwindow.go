@@ -94,8 +94,8 @@ func main_window(w fyne.Window) {
 				if errs != nil && fatal {
 					dialog.ShowError(errors.Join(errs...), w)
 				}
-				// case <-lndIsReady:
-				// logwidget.Segments = append(logwidget.Segments, &widget.TextSegment{Text: "lnd is ready"})
+			case <-lndIsReady:
+				logwidget.Segments = append(logwidget.Segments, &widget.TextSegment{Text: "lnd is ready"})
 			case <-done:
 				return
 			}
