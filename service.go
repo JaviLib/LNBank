@@ -73,12 +73,12 @@ type Service interface {
 // All services running are here
 var (
 	Services map[string]Service
-	Logdb    *sql.DB
+	DB       *sql.DB
 )
 
 var (
 	ServiceRootDir string
-	LogDBFile      string
+	DBFile         string
 )
 
 var (
@@ -103,23 +103,23 @@ func init() {
 		panic("Cannot create LNBank root dir")
 	}
 
-	LogDBFile = filepath.Join(ServiceRootDir, "log.sqlite3")
+	DBFile = filepath.Join(ServiceRootDir, "lnbank.sqlite3")
 	// Check if the log database file exists
-	_, err = os.Stat(LogDBFile)
+	_, err = os.Stat(DBFile)
 	if err != nil { // if file does not exist
-		Logdb, err = sql.Open("sqlite3", LogDBFile)
+		DB, err = sql.Open("sqlite3", DBFile)
 		if err != nil {
 			fmt.Println("Error opening/creating SQLite DB:", err)
-			panic("Panic, can't create log SQLite DB")
+			panic("Panic, can't create LNBank SQLite DB")
 		} else {
-			_, err = Logdb.Exec(LogTable)
+			_, err = DB.ExecContext(ServicesContext, LogTable)
 			if err != nil {
 				fmt.Println("Error creating table:", err)
 				panic("Panic, can't create table")
 			}
 		}
 	} else { // if it does exist, just open the db
-		Logdb, err = sql.Open("sqlite3", LogDBFile)
+		DB, err = sql.Open("sqlite3", DBFile)
 		if err != nil {
 			panic("Log DB is corrupted")
 		}
@@ -249,7 +249,7 @@ func LogToDb(log *Log) (errs []error, fatal bool) {
 	// Prepare a statement for inserting the log into the database but only if it doesn't exist
 	if insertStmt == nil {
 		var err error
-		insertStmt, err = Logdb.Prepare(
+		insertStmt, err = DB.PrepareContext(ServicesContext,
 			"INSERT INTO log (timestamp, type_id, desc, service) VALUES (?, ?, ?, ?)",
 		)
 		if err != nil {
@@ -259,7 +259,7 @@ func LogToDb(log *Log) (errs []error, fatal bool) {
 		// TODO defer stmt.Close()
 	}
 
-	_, err := insertStmt.Exec(log.date.Unix(), log.logType, log.desc, log.service)
+	_, err := insertStmt.ExecContext(ServicesContext, log.date.Unix(), log.logType, log.desc, log.service)
 	if err != nil {
 		return append(errs, err), true
 	}
@@ -354,7 +354,7 @@ func QueryLog(duration time.Duration,
 		params = append(params, limit)
 	}
 
-	result, err := Logdb.Query(conditions.String(), params...)
+	result, err := DB.QueryContext(ServicesContext, conditions.String(), params...)
 	if err != nil {
 		return LogQuery{}, err
 	}
@@ -400,9 +400,6 @@ func QueryLog(duration time.Duration,
 }
 
 const LogTable = `
-PRAGMA journal_mode = WAL;
-PRAGMA busy_timeout = 10;
-
 CREATE TABLE IF NOT EXISTS log (
     timestamp INTEGER NOT NULL ,
     type_id TINYINT NOT NULL,
@@ -410,27 +407,6 @@ CREATE TABLE IF NOT EXISTS log (
     desc TEXT NOT NULL COLLATE NOCASE
 );
 create index log_idx on log (timestamp, type_id, service COLLATE NOCASE);
-
-CREATE VIEW last_hour_logs AS
-  SELECT * FROM log
-  WHERE timestamp >= strftime('%s', 'now', '-1 hour')
-  ORDER BY timestamp DESC;
-CREATE VIEW last_day_logs AS
-  SELECT * FROM log
-  WHERE timestamp >= strftime('%s', 'now', '-1 day')
-  ORDER BY timestamp DESC;
-CREATE VIEW last_week_logs AS
-  SELECT * FROM log
-  WHERE timestamp >= strftime('%s', 'now', '-7 day')
-  ORDER BY timestamp DESC;
-CREATE VIEW last_month_logs AS
-  SELECT * FROM log
-  WHERE timestamp >= strftime('%s', 'now', '-1 month')
-  ORDER BY timestamp DESC;
-CREATE VIEW last_year_logs AS
-  SELECT * FROM log
-  WHERE timestamp >= strftime('%s', 'now', '-1 year')
-  ORDER BY timestamp DESC;
 
 INSERT INTO log (timestamp, type_id, desc, service)
   VALUES (strftime('%s'), 0, 'Creation of LNBank', 'LNBank');

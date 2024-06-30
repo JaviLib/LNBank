@@ -122,7 +122,7 @@ func TestValidate(t *testing.T) {
 }
 
 func TestLogToDb(t *testing.T) {
-	db := Logdb
+	db := DB
 
 	log := &Log{
 		date:    time.Now(),
@@ -194,7 +194,7 @@ func TestQueryLog(t *testing.T) {
 
 	// check that we can get the first log
 
-	query, err := QueryLog(time.Hour*5, nil, nil, "", 0)
+	query, err := QueryLog(time.Hour*10000, nil, nil, "", 0)
 	if err != nil {
 		t.Fatal(err)
 	} else {
@@ -206,7 +206,7 @@ func TestQueryLog(t *testing.T) {
 		query.close()
 	}
 	// check for logtypes
-	query, err = QueryLog(time.Hour*5, []LogType{WARNING}, nil, "", 0)
+	query, err = QueryLog(time.Hour*10000, []LogType{WARNING}, nil, "", 0)
 	if err != nil {
 		t.Fatal(err)
 	} else {
@@ -218,7 +218,7 @@ func TestQueryLog(t *testing.T) {
 		query.close()
 	}
 	// check for services
-	query, err = QueryLog(time.Hour*5, []LogType{ERROR}, []string{servs[0], servs[1]}, "", 0)
+	query, err = QueryLog(time.Hour*10000, []LogType{ERROR}, []string{servs[0], servs[1]}, "", 0)
 	if err != nil {
 		t.Fatal(err)
 	} else {
@@ -230,7 +230,7 @@ func TestQueryLog(t *testing.T) {
 		query.close()
 	}
 	// check for description
-	query, err = QueryLog(time.Hour*5, nil, nil, "description % 4", 0)
+	query, err = QueryLog(time.Hour*10000, nil, nil, "description % 4", 0)
 	if err != nil {
 		t.Fatal(err)
 	} else {

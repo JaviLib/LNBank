@@ -69,6 +69,7 @@ func main_window(w fyne.Window) {
 	content := container.NewBorder(nil, nil, left, nil, right)
 
 	sessionlogs := make([]*Log, 0)
+	done := make(chan bool)
 	go func() {
 		for {
 			select {
@@ -93,9 +94,9 @@ func main_window(w fyne.Window) {
 				if errs != nil && fatal {
 					dialog.ShowError(errors.Join(errs...), w)
 				}
-			// case <-lndIsReady:
-			// logwidget.Segments = append(logwidget.Segments, &widget.TextSegment{Text: "lnd is ready"})
-			case <-ServicesContext.Done():
+				// case <-lndIsReady:
+				// logwidget.Segments = append(logwidget.Segments, &widget.TextSegment{Text: "lnd is ready"})
+			case <-done:
 				return
 			}
 		}
@@ -108,10 +109,11 @@ func main_window(w fyne.Window) {
 			date:    time.Now(),
 			logType: WARNING,
 			service: "LNBank",
-			desc:    "closing all services and exiting in 2 seconds",
+			desc:    "closing all services",
 		}
+		// wait for the last logs to happen
 		ServicesCancelFunc()
-		time.Sleep(time.Second * 2)
+		done <- true
 		w.Close()
 	})
 	w.ShowAndRun()

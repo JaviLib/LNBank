@@ -205,7 +205,7 @@ const (
 SocksPort localhost:9055
 ControlPort localhost:9056
 MaxClientCircuitsPending 1024	
-  ##CookieAuthentication 1
+CookieAuthentication 1
 
 ## End of LNBank configuration. Below is a copy of the official
 ## Tor example configuration file. Please do not enable conflicting
