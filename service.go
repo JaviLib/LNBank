@@ -474,6 +474,22 @@ scanLoop:
 	return log
 }
 
+// Install an embeded executable, using exePath to determine if it is already
+// installed and log out the result to onLog
+func InstallExe(embededZip []byte, exePath string, onLog func(*Log)) error {
+	_, err := os.Stat(exePath)
+	if err != nil {
+		rd := bytes.NewReader(embededZip)
+		if err := UnzipReader(rd, int64(len(embededZip)), ServiceRootDir, onLog); err != nil {
+			return errors.New("Cannot unzip embeded zip: " + err.Error())
+		}
+		// gc the memory
+		embededLnd = nil
+		return errors.New("installed")
+	}
+	return nil
+}
+
 const LogTable = `
 CREATE TABLE IF NOT EXISTS log (
     timestamp INTEGER NOT NULL ,

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
 	"errors"
@@ -13,24 +12,9 @@ import (
 	"time"
 )
 
-//go:embed embed/mac/tor.zip
+//go:embed embed/tor.zip
 var embededTor []byte
 var TorExePath string
-
-func InstallTorExe(onLog func(*Log)) error {
-	TorExePath = filepath.Join(ServiceRootDir, "embed", "mac", "tor", "tor")
-	_, err := os.Stat(TorExePath)
-	if err != nil {
-		rd := bytes.NewReader(embededTor)
-		if err := UnzipReader(rd, int64(len(embededTor)), ServiceRootDir, onLog); err != nil {
-			return errors.New("Cannot unzip embeded tor.zip: " + err.Error())
-		}
-		// gc the memory
-		embededTor = nil
-		return errors.New("installed")
-	}
-	return nil
-}
 
 var (
 	TorConfigPath string
@@ -64,7 +48,8 @@ func (ts TorService) start(ctx context.Context, onReady func(), onStop func(*Log
 	ts.onLog = onLog
 	ts.ctx = ctx
 
-	if err := InstallTorExe(onLog); err != nil && err.Error() != "installed" {
+	TorExePath = filepath.Join(ServiceRootDir, "embed", "tor", "tor")
+	if err := InstallExe(embededTor, TorExePath, onLog); err != nil && err.Error() != "installed" {
 		log := ts.fmtLog(FATAL, err.Error())
 		go onLog(log)
 		go onStop(log)
