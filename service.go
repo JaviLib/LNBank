@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"bufio"
 	"bytes"
 	"context"
 	"database/sql"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -64,7 +66,15 @@ type Service interface {
 		onStop func(*Log),
 		onLog func(*Log),
 	)
+	onLogHook() func(*Log)
+	onReadyHook() func()
 	getConfigFile() (string, error)
+	name() string
+
+	// given a line of text, return a log
+	parseLogEntry(string) (Log, error)
+	// given a text from a log, determine if the service is ready to accept connections
+	isReady(string) bool
 
 	// This is used to format the log before showing to the user or insert in db
 	fmtLog(LogType, string) *Log
@@ -397,6 +407,71 @@ func QueryLog(duration time.Duration,
 		},
 	}
 	return logQuery, nil
+}
+
+// Given a prepared command, execute it and scan its output calling onLog and onReady
+// functions of the service interface. It exit when the command ends which should be
+// when the context is cancelled.
+func ScanCommand(ctx context.Context, service Service, cmd *exec.Cmd) *Log {
+	onLog := service.onLogHook()
+	onReady := service.onReadyHook()
+	name := service.name()
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		go onLog(service.fmtLog(FATAL, "error preparing "+name+" execution: "+err.Error()))
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	err = cmd.Start()
+	if err != nil {
+		go onLog(service.fmtLog(FATAL, "error executing "+name+": "+err.Error()))
+	}
+
+	scanComming := make(chan bool, 1000)
+	go func() {
+		for scanner.Scan() {
+			scanComming <- true
+		}
+		scanComming <- false
+		// close(scanComming)
+	}()
+	log := service.fmtLog(INFO, "exit")
+scanLoop:
+	for {
+		select {
+		case <-ctx.Done():
+			// send the kill signal and lets hope the scanner will end with some useful logs
+			if err := cmd.Process.Kill(); err != nil {
+				log = service.fmtLog(FATAL, "cannot kill "+name+" process: "+err.Error())
+				go onLog(log)
+			}
+		case goon := <-scanComming:
+			if !goon {
+				defer close(scanComming)
+				break scanLoop
+			}
+			text := scanner.Text()
+			l, err := service.parseLogEntry(text)
+			if err != nil {
+				go onLog(service.fmtLog(WARNING, fmt.Sprintf("non-conventional "+name+" log format %v: %s", err, text)))
+			} else {
+				go onLog(&l)
+				if service.isReady(l.desc) {
+					go onReady()
+				}
+			}
+		}
+	}
+	if scanerr := scanner.Err(); scanerr != nil {
+		log = service.fmtLog(FATAL, "error receiving stdout from "+name+": %v"+scanerr.Error())
+	}
+	if err := cmd.Wait(); err != nil {
+		if err.Error() != "signal: killed" {
+			log = service.fmtLog(FATAL, err.Error())
+		}
+	}
+	go onLog(log)
+	return log
 }
 
 const LogTable = `

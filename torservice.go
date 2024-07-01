@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	_ "embed"
@@ -42,7 +41,6 @@ type TorService struct {
 	onReady func()
 	onStop  func(*Log)
 	onLog   func(*Log)
-	cmd     *exec.Cmd
 	ctx     context.Context
 }
 
@@ -98,69 +96,33 @@ func (ts TorService) start(ctx context.Context, onReady func(), onStop func(*Log
 		}
 	}
 
-	ts.cmd = exec.Command(TorExePath, "-f", TorConfigFile)
-	stdout, err := ts.cmd.StdoutPipe()
-	if err != nil {
-		go onLog(ts.fmtLog(FATAL, "error preparing Tor execution: "+err.Error()))
-	}
-	scanner := bufio.NewScanner(stdout)
-	err = ts.cmd.Start()
-	if err != nil {
-		go onLog(ts.fmtLog(FATAL, "error executing Tor: "+err.Error()))
-	}
+	cmd := exec.Command(TorExePath, "-f", TorConfigFile)
+	log := ScanCommand(ctx, ts, cmd)
 
-	scanComming := make(chan bool, 1000)
-	go func() {
-		for scanner.Scan() {
-			scanComming <- true
-		}
-		scanComming <- false
-		// close(scanComming)
-	}()
-	log := ts.fmtLog(INFO, "exit")
-scanLoop:
-	for {
-		select {
-		case <-ctx.Done():
-			// send the kill signal and lets hope the scanner will end with some useful logs
-			if err := ts.cmd.Process.Kill(); err != nil {
-				log = ts.fmtLog(FATAL, "cannot kill Tor process: "+err.Error())
-				go onLog(log)
-			}
-		case goon := <-scanComming:
-			if !goon {
-				defer close(scanComming)
-				break scanLoop
-			}
-			text := scanner.Text()
-			l, err := parseTorEntry(text)
-			if err != nil {
-				go onLog(ts.fmtLog(WARNING, fmt.Sprintf("non-conventional Tor log format %v: %s", err, text)))
-			} else {
-				go onLog(&l)
-				if strings.Contains(l.desc, "Bootstrapped 100%") {
-					go onReady()
-				}
-			}
-		}
-	}
-	if scanerr := scanner.Err(); scanerr != nil {
-		log = ts.fmtLog(FATAL, "error receiving stdout from Tor: %v"+scanerr.Error())
-	}
-	if err := ts.cmd.Wait(); err != nil {
-		if err.Error() != "signal: killed" {
-			log = ts.fmtLog(FATAL, err.Error())
-		}
-	}
-	go onLog(log)
 	onStop(log)
+}
+
+func (ts TorService) onLogHook() func(*Log) {
+	return ts.onLog
+}
+
+func (ts TorService) onReadyHook() func() {
+	return ts.onReady
 }
 
 func (ts TorService) getConfigFile() (string, error) {
 	return TorConfigFile, nil // assuming that the torrc file path is stored as a global variable TorConfigPath
 }
 
-func parseTorEntry(line string) (Log, error) {
+func (ts TorService) name() string {
+	return "Tor"
+}
+
+func (ts TorService) isReady(text string) bool {
+	return strings.Contains(text, "Bootstrapped 100%")
+}
+
+func (ts TorService) parseLogEntry(line string) (Log, error) {
 	parts := strings.SplitN(line, " ", 5)
 	if len(parts) < 4 {
 		return Log{}, fmt.Errorf("invalid log format")
