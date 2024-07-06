@@ -103,7 +103,7 @@ func (ts LndService) name() string {
 }
 
 func (ts LndService) isReady(text string) bool {
-	return strings.Contains(text, "Fully caught up with cfheaders")
+	return strings.Contains(text, "Database(s) now open")
 }
 
 func (ts LndService) parseLogEntry(line string) (Log, error) {

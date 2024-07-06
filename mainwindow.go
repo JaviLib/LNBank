@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -72,6 +73,7 @@ func main_window(w fyne.Window) {
 	sessionlogs := make([]*Log, 0)
 	done := make(chan bool)
 	go func() {
+		var mu sync.Mutex
 		for {
 			select {
 			case l := <-logs:
@@ -87,8 +89,13 @@ func main_window(w fyne.Window) {
 						},
 					},
 				}
+				// Fyne may have some race conditions, we need mutex
+				mu.Lock()
 				logwidget.Segments = append(logwidget.Segments, &segment)
 				sessionlogs = append(sessionlogs, l)
+				logwidget.Refresh()
+				logscroll.ScrollToBottom()
+				mu.Unlock()
 				errs, fatal := LogToDb(l)
 				if errs != nil && fatal {
 					dialog.ShowError(errors.Join(errs...), w)
@@ -99,17 +106,6 @@ func main_window(w fyne.Window) {
 				// logwidget.Refresh()
 				logscroll.ScrollToBottom()
 			case <-done:
-				return
-			}
-		}
-	}()
-	go func() {
-		for {
-			select {
-			case <-time.After(time.Second):
-				logwidget.Refresh()
-				logscroll.ScrollToBottom()
-			case <-ServicesContext.Done():
 				return
 			}
 		}
