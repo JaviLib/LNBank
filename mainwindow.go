@@ -14,6 +14,9 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+// this is used for main_window widgets to avoid Fyne races
+var mw_mutex sync.Mutex
+
 func main_window(w fyne.Window) {
 	// When Tor is ready, pass the context to the next service (LND)
 	torIsReady := make(chan context.Context)
@@ -73,7 +76,6 @@ func main_window(w fyne.Window) {
 	sessionlogs := make([]*Log, 0)
 	done := make(chan bool)
 	go func() {
-		var mu sync.Mutex
 		for {
 			select {
 			case l := <-logs:
@@ -90,21 +92,23 @@ func main_window(w fyne.Window) {
 					},
 				}
 				// Fyne may have some race conditions, we need mutex
-				mu.Lock()
+				mw_mutex.Lock()
 				logwidget.Segments = append(logwidget.Segments, &segment)
 				sessionlogs = append(sessionlogs, l)
 				logwidget.Refresh()
 				logscroll.ScrollToBottom()
-				mu.Unlock()
+				mw_mutex.Unlock()
 				errs, fatal := LogToDb(l)
 				if errs != nil && fatal {
 					dialog.ShowError(errors.Join(errs...), w)
 				}
 				// TODO remove once the dependencies are installed
 			case <-lndIsReady:
+				mw_mutex.Lock()
 				logwidget.Segments = append(logwidget.Segments, &widget.TextSegment{Text: "lnd is ready"})
 				// logwidget.Refresh()
 				logscroll.ScrollToBottom()
+				mw_mutex.Unlock()
 			case <-done:
 				return
 			}

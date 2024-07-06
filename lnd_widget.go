@@ -29,16 +29,20 @@ func lnd_widgets(torIsReady <-chan context.Context, lndIsReady chan<- context.Co
 		logs <- l
 	}
 	onReady := func() {
+		mw_mutex.Lock()
 		card.SetTitle("✅ lnd")
 		card.SetContent(container.New(layout.NewGridLayoutWithColumns(2),
 			widget.NewButtonWithIcon("stop", theme.MediaStopIcon(), cancel),
 			settings))
+		mw_mutex.Unlock()
 		go func() {
 			isRunning = true
 			clock := time.Now()
 			for isRunning {
 				// TODO check real version
+				mw_mutex.Lock()
 				card.SetSubTitle("v0.18.1b    🕓 " + time.Since(clock).Round(time.Second).String())
+				mw_mutex.Unlock()
 				time.Sleep(time.Second)
 			}
 		}()
@@ -51,10 +55,12 @@ func lnd_widgets(torIsReady <-chan context.Context, lndIsReady chan<- context.Co
 	}
 	onStop := func(l *Log) {
 		logs <- service.fmtLog(INFO, "lnd is stopped, it won't accept connections")
+		mw_mutex.Lock()
 		card.SetTitle("🔴 lnd")
 		card.SetSubTitle("stopped")
 		card.SetContent(container.New(layout.NewGridLayoutWithColumns(2),
 			widget.NewButtonWithIcon("start", theme.MediaPlayIcon(), runlnd), settings))
+		mw_mutex.Unlock()
 		isRunning = false
 		// this will make stop all child services
 		cancel()
@@ -63,11 +69,13 @@ func lnd_widgets(torIsReady <-chan context.Context, lndIsReady chan<- context.Co
 	runlnd = func() {
 		torctx := <-torIsReady
 		ctx, cancel = context.WithCancel(torctx)
+		mw_mutex.Lock()
 		card.SetTitle("⏳ lnd")
 		card.SetSubTitle("starting...")
 		card.SetContent(container.New(layout.NewGridLayoutWithColumns(1),
 			widget.NewButtonWithIcon("cancel", theme.CancelIcon(), cancel),
 		))
+		mw_mutex.Unlock()
 		// card.SetContent(widget.NewProgressBarInfinite())
 		go service.start(ctx, onReady, onStop, onLog)
 	}
