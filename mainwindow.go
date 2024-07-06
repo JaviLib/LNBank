@@ -27,7 +27,7 @@ func main_window(w fyne.Window) {
 	left := container.New(
 		layout.NewVBoxLayout(),
 		tor_widgets(torIsReady, logs),
-		lnd_widgets(torIsReady, lndIsReady),
+		lnd_widgets(torIsReady, lndIsReady, logs),
 	)
 
 	logwidget := widget.NewRichTextWithText("Session entries:\n")
@@ -88,8 +88,6 @@ func main_window(w fyne.Window) {
 					},
 				}
 				logwidget.Segments = append(logwidget.Segments, &segment)
-				logwidget.Refresh()
-				logscroll.ScrollToBottom()
 				sessionlogs = append(sessionlogs, l)
 				errs, fatal := LogToDb(l)
 				if errs != nil && fatal {
@@ -98,9 +96,20 @@ func main_window(w fyne.Window) {
 				// TODO remove once the dependencies are installed
 			case <-lndIsReady:
 				logwidget.Segments = append(logwidget.Segments, &widget.TextSegment{Text: "lnd is ready"})
-				logwidget.Refresh()
+				// logwidget.Refresh()
 				logscroll.ScrollToBottom()
 			case <-done:
+				return
+			}
+		}
+	}()
+	go func() {
+		for {
+			select {
+			case <-time.After(time.Second):
+				logwidget.Refresh()
+				logscroll.ScrollToBottom()
+			case <-ServicesContext.Done():
 				return
 			}
 		}

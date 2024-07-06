@@ -420,6 +420,10 @@ func ScanCommand(ctx context.Context, service Service, cmd *exec.Cmd) *Log {
 	if err != nil {
 		go onLog(service.fmtLog(FATAL, "error preparing "+name+" execution: "+err.Error()))
 	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		go onLog(service.fmtLog(FATAL, "error preparing "+name+" execution: "+err.Error()))
+	}
 
 	scanner := bufio.NewScanner(stdout)
 	err = cmd.Start()
@@ -436,6 +440,17 @@ func ScanCommand(ctx context.Context, service Service, cmd *exec.Cmd) *Log {
 		// close(scanComming)
 	}()
 	log := service.fmtLog(INFO, "exit")
+
+	scannerErr := bufio.NewScanner(stderr)
+	fatalComming := make(chan bool, 1000)
+	go func() {
+		for scannerErr.Scan() {
+			fatalComming <- true
+		}
+		fatalComming <- false
+		// close(scanComming)
+	}()
+
 scanLoop:
 	for {
 		select {
@@ -460,6 +475,12 @@ scanLoop:
 					go onReady()
 				}
 			}
+		case fatal := <-fatalComming:
+			if !fatal {
+				defer close(fatalComming)
+				break scanLoop
+			}
+			go onLog(service.fmtLog(FATAL, scannerErr.Text()))
 		}
 	}
 	if scanerr := scanner.Err(); scanerr != nil {
@@ -483,8 +504,6 @@ func InstallExe(embededZip []byte, exePath string, onLog func(*Log)) error {
 		if err := UnzipReader(rd, int64(len(embededZip)), ServiceRootDir, onLog); err != nil {
 			return errors.New("Cannot unzip embeded zip: " + err.Error())
 		}
-		// gc the memory
-		embededLnd = nil
 		return errors.New("installed")
 	}
 	return nil

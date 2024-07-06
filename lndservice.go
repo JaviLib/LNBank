@@ -68,10 +68,9 @@ func (ts LndService) start(ctx context.Context, onReady func(), onStop func(*Log
 	}
 
 	// TODO check that torrc contains the proper path, in case that the user migrated to another computer
-	LndConfigFile = filepath.Join(LndConfigPath, "torrc")
+	LndConfigFile = filepath.Join(LndConfigPath, "lnd.conf")
 	if _, err := os.Stat(LndConfigFile); os.IsNotExist(err) {
-		config := fmt.Sprintf("DataDirectory %s/data\n%s", LndConfigPath, defaultLndConfig)
-		err = os.WriteFile(LndConfigFile, []byte(config), 0644)
+		err = os.WriteFile(LndConfigFile, []byte(defaultLndConfig), 0644)
 		if err != nil {
 			log := ts.fmtLog(FATAL,
 				fmt.Sprintf("Cannot create lnd configuration file %v: ", err))
@@ -81,7 +80,7 @@ func (ts LndService) start(ctx context.Context, onReady func(), onStop func(*Log
 		}
 	}
 
-	cmd := exec.Command(LndExePath, "-f", LndConfigFile)
+	cmd := exec.Command(LndExePath, "--lnddir="+LndConfigPath)
 	log := ScanCommand(ctx, ts, cmd)
 
 	onStop(log)
@@ -104,7 +103,7 @@ func (ts LndService) name() string {
 }
 
 func (ts LndService) isReady(text string) bool {
-	return strings.Contains(text, "Bootstrapped 100%")
+	return strings.Contains(text, "Fully caught up with cfheaders")
 }
 
 func (ts LndService) parseLogEntry(line string) (Log, error) {
@@ -113,33 +112,33 @@ func (ts LndService) parseLogEntry(line string) (Log, error) {
 		return Log{}, fmt.Errorf("invalid log format")
 	}
 
-	timeLayout := "2006 Jan _2 15:04:05.000 MST"
-	correctDate := fmt.Sprintf("%s %s %s",
-		time.Now().Format("2006"),
-		strings.Join(parts[0:3], " "),
+	timeLayout := "2006-01-02 15:04:05.000 MST"
+	correctDate := fmt.Sprintf("%s %s",
+		strings.Join(parts[0:2], " "),
 		time.Now().Format("MST"))
 	t, err := time.Parse(timeLayout, correctDate)
 	if err != nil {
-		return Log{}, fmt.Errorf("failed to parse timestamp: %v", err)
+		return *ts.fmtLog(INFO, line), fmt.Errorf("failed to parse timestamp: %v", err)
 	}
 
 	var logtype LogType
-	switch parts[3] {
-	case "[err]":
+	switch parts[2] {
+	case "[ERR]":
 		logtype = ERROR
-	case "[warn]":
+	case "[WRN]":
 		logtype = WARNING
-	case "[notice]":
+	case "[INF]":
 		logtype = INFO
 	default:
 		logtype = NORMAL
 	}
 
+	fmt.Println(parts)
 	logEntry := Log{
 		date:    t,
 		logType: logtype,
 		desc:    parts[4],
-		service: "Lnd",
+		service: parts[3][0:4],
 	}
 
 	errs := logEntry.Validate()
@@ -149,6 +148,69 @@ func (ts LndService) parseLogEntry(line string) (Log, error) {
 
 const (
 	defaultLndConfig = `
+restlisten=localhost:8090
+rpclisten=localhost:10019
+listen=0.0.0.0:9745
+payments-expiration-grace-period=30m
+maxpendingchannels=100
+minchansize=100000
+maxchansize=10000000
+coop-close-target-confs=144
+max-cltv-expiry=20000
+max-commit-fee-rate-anchors=700
+accept-keysend=true
+accept-amp=true
+gc-canceled-invoices-on-startup=false
+gc-canceled-invoices-on-the-fly=false
+allow-circular-route=true
+alias=LNBank
+color=#FFB533
+bitcoin.defaultchanconfs=2
+bitcoin.basefee=100
+bitcoin.feerate=10
+bitcoin.timelockdelta=80
+watchtower.active=true
+wtclient.active=true
+wtclient.sweep-fee-rate=25
+
+bitcoin.mainnet=true
+bitcoin.node=neutrino
+neutrino.connect=btcd1.lnolymp.us
+neutrino.connect=btcd2.lnolymp.us
+neutrino.connect=btcd-mainnet.lightning.computer
+neutrino.connect=node.blixtwallet.com
+neutrino.connect=node.eldamar.icu
+neutrino.connect=noad.sathoarder.com
+neutrino.connect=bb1.breez.technology
+neutrino.connect=bb2.breez.technology
+neutrino.persistfilters=true
+
+# https://github.com/LN-Zap/bitcoin-blended-fee-estimator
+# https://t.me/lightningd/32115
+feeurl=https://bitcoinchainfees.strike.me/v1/fee-estimates
+# alternative more conservative:
+#feeurl=https://nodes.lightning.computer/fees/v1/btc-fee-estimates.json
+
+tor.active=true
+tor.v3=true
+tor.skip-proxy-for-clearnet-targets=true
+tor.streamisolation=false
+tor.socks=9055
+tor.control=localhost:9056
+
+debuglevel=info
+
+#  https://github.com/lightningnetwork/lnd/issues/8018#issuecomment-1728883664
+max-channel-fee-allocation=1
+
+
+## End of LNBank configuration. Below is a copy of the official
+## LND example configuration file. Please below do not enable conflicting
+## configurations with the above ones. If you change anything ensure you
+## update it too in other services like LNBits or LNDg. Do not make changes if you
+## don't know what you are doing.
+## Do not remove ~/LNBank/lnd/ folder or you will loose everything.
+
 ; Example configuration for lnd.
 ;
 ; The default location for this file is in ~/.lnd/lnd.conf on POSIX OSes,
