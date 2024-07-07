@@ -53,6 +53,7 @@ func lnd_widgets(torIsReady <-chan context.Context, lndIsReady chan<- context.Co
 			lndIsReady <- ctx
 		}
 	}
+	var torctx context.Context
 	onStop := func(l *Log) {
 		logs <- service.fmtLog(INFO, "lnd is stopped, it won't accept connections")
 		mw_mutex.Lock()
@@ -64,22 +65,31 @@ func lnd_widgets(torIsReady <-chan context.Context, lndIsReady chan<- context.Co
 		isRunning = false
 		// this will make stop all child services
 		cancel()
+		go func() {
+			<-torctx.Done()
+			fmt.Println("lnd is informed that tor ctx is done")
+			torctx = nil
+		}()
 	}
 
 	runlnd = func() {
-		torctx := <-torIsReady
-		ctx, cancel = context.WithCancel(torctx)
-		mw_mutex.Lock()
-		card.SetTitle("⏳ lnd")
-		card.SetSubTitle("starting...")
-		card.SetContent(container.New(layout.NewGridLayoutWithColumns(1),
-			widget.NewButtonWithIcon("cancel", theme.CancelIcon(), cancel),
-		))
-		mw_mutex.Unlock()
-		// card.SetContent(widget.NewProgressBarInfinite())
-		go service.start(ctx, onReady, onStop, onLog)
+		go func() {
+			mw_mutex.Lock()
+			card.SetTitle("⏳ lnd")
+			card.SetSubTitle("starting...")
+			card.SetContent(container.New(layout.NewGridLayoutWithColumns(1),
+				widget.NewButtonWithIcon("cancel", theme.CancelIcon(), cancel),
+			))
+			mw_mutex.Unlock()
+			// card.SetContent(widget.NewProgressBarInfinite())
+			if torctx == nil {
+				torctx = <-torIsReady
+			}
+			ctx, cancel = context.WithCancel(torctx)
+			service.start(ctx, onReady, onStop, onLog)
+		}()
 	}
-	go runlnd()
+	runlnd()
 
 	// go func() {
 	// 	torctx := <-torIsReady
