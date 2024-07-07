@@ -74,7 +74,7 @@ type Service interface {
 	// given a line of text, return a log
 	parseLogEntry(string) (Log, error)
 	// given a text from a log, determine if the service is ready to accept connections
-	isReady(string) bool
+	isReady(text string, onLog func(*Log)) bool
 
 	// This is used to format the log before showing to the user or insert in db
 	fmtLog(LogType, string) *Log
@@ -458,7 +458,7 @@ scanLoop:
 			// send the kill signal and lets hope the scanner will end with some useful logs
 			if err := cmd.Process.Kill(); err != nil {
 				log = service.fmtLog(FATAL, "cannot kill "+name+" process: "+err.Error())
-				go onLog(log)
+				onLog(log)
 			}
 		case goon := <-scanComming:
 			if !goon {
@@ -468,11 +468,11 @@ scanLoop:
 			text := scanner.Text()
 			l, err := service.parseLogEntry(text)
 			if err != nil {
-				go onLog(service.fmtLog(WARNING, fmt.Sprintf("non-conventional "+name+" log format %v: %s", err, text)))
+				onLog(service.fmtLog(WARNING, fmt.Sprintf("non-conventional "+name+" log format %v: %s", err, text)))
 			} else {
-				go onLog(&l)
-				if service.isReady(l.desc) {
-					go onReady()
+				onLog(&l)
+				if service.isReady(l.desc, onLog) {
+					onReady()
 				}
 			}
 		case fatal := <-fatalComming:
@@ -480,7 +480,7 @@ scanLoop:
 				defer close(fatalComming)
 				break scanLoop
 			}
-			go onLog(service.fmtLog(FATAL, scannerErr.Text()))
+			onLog(service.fmtLog(FATAL, scannerErr.Text()))
 		}
 	}
 	if scanerr := scanner.Err(); scanerr != nil {
@@ -491,7 +491,7 @@ scanLoop:
 			log = service.fmtLog(FATAL, err.Error())
 		}
 	}
-	go onLog(log)
+	onLog(log)
 	return log
 }
 

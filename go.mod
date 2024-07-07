@@ -6,6 +6,7 @@ require (
 	fyne.io/fyne/v2 v2.4.5
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/stretchr/testify v1.8.4
+	golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6
 )
 
 require (

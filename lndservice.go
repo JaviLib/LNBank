@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"errors"
@@ -10,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"golang.org/x/exp/rand"
 )
 
 //go:embed embed/lnd.zip
@@ -102,7 +105,38 @@ func (ts LndService) name() string {
 	return "Lnd"
 }
 
-func (ts LndService) isReady(text string) bool {
+func createlndpass(length int) string {
+	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[rand.Intn(len(charset))]
+	}
+	return string(b)
+}
+
+func (ts LndService) isReady(text string, onLog func(*Log)) bool {
+	_, err := os.Stat(filepath.Join(ServiceRootDir, "lnd", "data", "chain", "mainnet", "bitcoin", "wallet.db"))
+	if err != nil && strings.Contains(text, "Waiting for wallet encryption password") {
+		fmt.Println("Creating wallet ----------------------------------------")
+		pass := createlndpass(20)
+		err := SetConfig("pass", "lnd", pass)
+		if err != nil {
+			onLog(ts.fmtLog(FATAL, "cannot write lnd password to db: "+err.Error()))
+		}
+		cmd := exec.Command(filepath.Join(ServiceRootDir, "embed", "lnd", "lncli"), "--lnddir="+LndConfigPath, "create", pass)
+		var stdin bytes.Buffer
+		stdin.WriteString(pass + "\n" + pass + "\nn\n\n")
+		cmd.Stdin = &stdin
+
+		output, err := cmd.CombinedOutput()
+		onLog(ts.fmtLog(INFO, string(output)))
+		if err != nil {
+			onLog(ts.fmtLog(FATAL, string(output)+err.Error()))
+		}
+		if err := SetConfig("CreateOutput", "lnd", string(output)); err != nil {
+			onLog(ts.fmtLog(FATAL, "cannot write lnd wallet creation output to db"))
+		}
+	}
 	return strings.Contains(text, "Database(s) now open")
 }
 
@@ -151,6 +185,7 @@ const (
 restlisten=localhost:8090
 rpclisten=localhost:10019
 listen=0.0.0.0:9745
+tlsautorefresh=true
 payments-expiration-grace-period=30m
 maxpendingchannels=100
 minchansize=100000

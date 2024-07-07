@@ -126,7 +126,9 @@ func main_window(w fyne.Window) {
 		}
 		// wait for the last logs to happen
 		ServicesCancelFunc()
+		time.Sleep(time.Millisecond * 100)
 		done <- true
+		time.Sleep(time.Millisecond * 100)
 		w.Close()
 	})
 	w.ShowAndRun()

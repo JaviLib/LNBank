@@ -103,7 +103,7 @@ func (ts TorService) name() string {
 	return "Tor"
 }
 
-func (ts TorService) isReady(text string) bool {
+func (ts TorService) isReady(text string, onLog func(*Log)) bool {
 	return strings.Contains(text, "Bootstrapped 100%")
 }
 
